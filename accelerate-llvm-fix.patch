@@ -1,0 +1,93 @@
+diff --git a/accelerate-llvm-native/accelerate-llvm-native.cabal b/accelerate-llvm-native/accelerate-llvm-native.cabal
+index 0b173089..40a4bcc8 100644
+--- a/accelerate-llvm-native/accelerate-llvm-native.cabal
++++ b/accelerate-llvm-native/accelerate-llvm-native.cabal
+@@ -125,7 +125,7 @@ Library
+         , accelerate-llvm               == 1.3.*
+         , bytestring                    >= 0.10.4
+         , cereal                        >= 0.4
+-        , containers                    >= 0.5 && < 0.7
++        , containers                    >= 0.5 && < 0.8
+         , deepseq                       >= 1.4
+         , directory                     >= 1.0
+         , dlist                         >= 0.6
+@@ -134,8 +134,8 @@ Library
+         , ghc
+         , hashable                      >= 1.0
+         , libffi                        >= 0.1
+-        , llvm-hs                       >= 4.1 && < 16
+-        , llvm-hs-pure                  >= 4.1 && < 16
++        , llvm-hs                       >= 4.1 && < 17
++        , llvm-hs-pure                  >= 4.1 && < 17
+         , lockfree-queue                >= 0.2
+         , mtl                           >= 2.2.1
+           -- TODO: These are only used for lifting ByteStrings. bytestring
+diff --git a/accelerate-llvm-native/src/Data/Array/Accelerate/LLVM/Native/Plugin.hs b/accelerate-llvm-native/src/Data/Array/Accelerate/LLVM/Native/Plugin.hs
+index 435a5e0d..3241409f 100644
+--- a/accelerate-llvm-native/src/Data/Array/Accelerate/LLVM/Native/Plugin.hs
++++ b/accelerate-llvm-native/src/Data/Array/Accelerate/LLVM/Native/Plugin.hs
+@@ -29,7 +29,11 @@ import qualified Data.Map                                           as Map
+ 
+ #if __GLASGOW_HASKELL__ >= 902
+ import GHC.Driver.Backend
++#if __GLASGOW_HASKELL__ < 910
+ import GHC.Linker
++#else
++import GHC.Linker.Dynamic
++#endif
+ import GHC.Linker.Loader                                            ( loadCmdLineLibs )
+ import GHC.Plugins
+ import GHC.Runtime.Interpreter
+diff --git a/accelerate-llvm/accelerate-llvm.cabal b/accelerate-llvm/accelerate-llvm.cabal
+index 1e238556..94045fb4 100644
+--- a/accelerate-llvm/accelerate-llvm.cabal
++++ b/accelerate-llvm/accelerate-llvm.cabal
+@@ -54,7 +54,7 @@ description:
+     .
+ 
+ license:                BSD-3-Clause
+-license-file:           LICENSE
++-- license-file:           LICENSE
+ author:                 Trevor L. McDonell
+ maintainer:             Trevor L. McDonell <trevor.mcdonell@gmail.com>
+ bug-reports:            https://github.com/AccelerateHS/accelerate/issues
+@@ -150,8 +150,8 @@ Library
+         , filepath                      >= 1.0
+         , formatting                    >= 7.0
+         , hashable                      >= 1.1
+-        , llvm-hs                       >= 4.1 && < 16
+-        , llvm-hs-pure                  >= 4.1 && < 16
++        , llvm-hs                       >= 4.1 && < 17
++        , llvm-hs-pure                  >= 4.1 && < 17
+         , mtl                           >= 2.0
+         , primitive                     >= 0.6.4
+         , template-haskell
+diff --git a/accelerate-llvm/src/LLVM/AST/Type/Function.hs b/accelerate-llvm/src/LLVM/AST/Type/Function.hs
+index b033be56..096d4547 100644
+--- a/accelerate-llvm/src/LLVM/AST/Type/Function.hs
++++ b/accelerate-llvm/src/LLVM/AST/Type/Function.hs
+@@ -25,6 +25,8 @@ import LLVM.AST.Type.Representation
+ import qualified LLVM.AST.Attribute                                 as LLVM
+ import qualified LLVM.AST.Global                                    as LLVM
+ import qualified LLVM.AST.Instruction                               as LLVM
++import qualified LLVM.AST.FunctionAttribute                         as LLVM.FA
++import qualified LLVM.AST.FunctionAttribute as LLVM.FA
+ 
+ 
+ -- | Attributes for the function call instruction
+@@ -69,12 +71,12 @@ data Function kind args t where
+ instance Downcast FunctionAttribute LLVM.FunctionAttribute where
+   downcast NoReturn            = LLVM.NoReturn
+   downcast NoUnwind            = LLVM.NoUnwind
+-  downcast ReadOnly            = LLVM.ReadOnly
+-  downcast ReadNone            = LLVM.ReadNone
++  downcast ReadOnly            = LLVM.FA.Memory (LLVM.FA.Exact (LLVM.FA.Other LLVM.FA.Read))
++  downcast ReadNone            = LLVM.FA.Memory (LLVM.FA.Exact (LLVM.FA.Other LLVM.FA.None))
+   downcast AlwaysInline        = LLVM.AlwaysInline
+   downcast NoDuplicate         = LLVM.NoDuplicate
+   downcast Convergent          = LLVM.Convergent
+-  downcast InaccessibleMemOnly = LLVM.InaccessibleMemOnly
++  downcast InaccessibleMemOnly = LLVM.FA.Memory (LLVM.FA.Exact (LLVM.FA.Inaccessiblemem LLVM.FA.Read))
+ 
+ instance Downcast (Parameter a) LLVM.Parameter where
+   downcast (Parameter t n) = LLVM.Parameter (downcast t) (downcast n) attrs

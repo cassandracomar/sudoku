@@ -1,0 +1,12 @@
+diff --git a/src/LLVM/Prelude.hs b/src/LLVM/Prelude.hs
+index 1fe0e08..60737d2 100644
+--- a/src/LLVM/Prelude.hs
++++ b/src/LLVM/Prelude.hs
+@@ -30,5 +30,6 @@ import Prelude hiding (
+     minimum, maximum, sum, product, all, any, and, or,
+     concatMap,
+     elem, notElem,
++    unzip,
+   )
+ import Data.Data (Data, Typeable)
+ import GHC.Generics (Generic)

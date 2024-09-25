@@ -1,0 +1,772 @@
+diff --git a/llvm-hs-pure/src/LLVM/AST/FunctionAttribute.hs b/llvm-hs-pure/src/LLVM/AST/FunctionAttribute.hs
+index a790d1b..9e2a687 100644
+--- a/llvm-hs-pure/src/LLVM/AST/FunctionAttribute.hs
++++ b/llvm-hs-pure/src/LLVM/AST/FunctionAttribute.hs
+@@ -3,17 +3,25 @@ module LLVM.AST.FunctionAttribute where
+ 
+ import LLVM.Prelude
+ 
++data MemoryAccess = None | Read | Write | ReadWrite
++    deriving (Eq, Ord, Read, Show, Typeable, Data, Generic, Enum)
++data MemoryLocation a = Argmem a | Inaccessiblemem a | Other a
++    deriving (Eq, Ord, Read, Show, Typeable, Data, Generic)
++data MemoryEffects a
++    = Exact (MemoryLocation a)
++    | Intersect (MemoryEffects a) (MemoryEffects a)
++    | Union (MemoryEffects a) (MemoryEffects a)
++    deriving (Eq, Ord, Read, Show, Typeable, Data, Generic)
++
+ -- | <http://llvm.org/docs/LangRef.html#function-attributes>
+ data FunctionAttribute
+-    = AllocSize Word32 (Maybe Word32) -- ^ AllocSize 0 (Just 0) is invalid
++    = -- | AllocSize 0 (Just 0) is invalid
++      AllocSize Word32 (Maybe Word32)
+     | AlwaysInline
+-    | ArgMemOnly
+     | Builtin
+     | Cold
+     | Convergent
+     | Hot
+-    | InaccessibleMemOnly
+-    | InaccessibleMemOrArgMemOnly
+     | InlineHint
+     | JumpTable
+     | MinimizeSize
+@@ -50,25 +58,28 @@ data FunctionAttribute
+     | ShadowCallStack
+     | Speculatable
+     | SpeculativeLoadHardening
++    | Memory (MemoryEffects MemoryAccess)
+     | StackAlignment Word64
+     | StackProtect
+     | StackProtectReq
+     | StackProtectStrong
+     | StrictFP
+-    | StringAttribute {
+-        stringAttributeKind :: ShortByteString,
+-        stringAttributeValue :: ShortByteString -- ^ Use "" for no value -- the two are conflated
+-      }
++    | StringAttribute
++        { stringAttributeKind :: ShortByteString
++        , stringAttributeValue :: ShortByteString
++        -- ^ Use "" for no value -- the two are conflated
++        }
+     | UWTable
+-    | VScaleRange {
+-        vScaleRangeMin :: Word32,
+-        vScaleRangeMax :: Word32 -- ^ Optional max is not supported. Set it to the minimum
+-                                 -- value if unspecified.
+-      }
++    | VScaleRange
++        { vScaleRangeMin :: Word32
++        , vScaleRangeMax :: Word32
++        -- ^ Optional max is not supported. Set it to the minimum
++        -- value if unspecified.
++        }
+     | WillReturn
+     | WriteOnly
+-  deriving (Eq, Ord, Read, Show, Typeable, Data, Generic)
++    deriving (Eq, Ord, Read, Show, Typeable, Data, Generic)
+ 
+ -- | <http://llvm.org/docs/LangRef.html#attribute-groups>
+ newtype GroupID = GroupID Word
+-  deriving (Eq, Ord, Read, Show, Typeable, Data, Generic)
++    deriving (Eq, Ord, Read, Show, Typeable, Data, Generic)
+diff --git a/llvm-hs-pure/src/LLVM/AST/Operand.hs b/llvm-hs-pure/src/LLVM/AST/Operand.hs
+index 51efed4..f57ab77 100644
+--- a/llvm-hs-pure/src/LLVM/AST/Operand.hs
++++ b/llvm-hs-pure/src/LLVM/AST/Operand.hs
+@@ -288,6 +288,8 @@ data DICompileUnit = CompileUnit
+   , debugInfoForProfiling :: Bool
+   , nameTableKind :: DebugNameTableKind
+   , rangesBaseAddress :: Bool
++  , sysroot :: ShortByteString
++  , sdk :: ShortByteString
+   } deriving (Eq, Ord, Read, Show, Typeable, Data, Generic)
+ 
+ -- | <https://llvm.org/docs/LangRef.html#difile>
+diff --git a/llvm-hs-pure/src/LLVM/Prelude.hs b/llvm-hs-pure/src/LLVM/Prelude.hs
+index 214369f..60737d2 100644
+--- a/llvm-hs-pure/src/LLVM/Prelude.hs
++++ b/llvm-hs-pure/src/LLVM/Prelude.hs
+@@ -30,7 +30,7 @@ import Prelude hiding (
+     minimum, maximum, sum, product, all, any, and, or,
+     concatMap,
+     elem, notElem,
+-    unzip
++    unzip,
+   )
+ import Data.Data (Data, Typeable)
+ import GHC.Generics (Generic)
+diff --git a/llvm-hs/Setup.hs b/llvm-hs/Setup.hs
+index 32c708e..9365264 100644
+--- a/llvm-hs/Setup.hs
++++ b/llvm-hs/Setup.hs
+@@ -9,6 +9,7 @@ import Distribution.PackageDescription hiding (buildInfo, includeDirs)
+ import Distribution.Simple
+ import Distribution.Simple.LocalBuildInfo
+ import Distribution.Simple.PreProcess
++import Distribution.Simple.PreProcess.Types (Suffix)
+ import Distribution.Simple.Program
+ import Distribution.Simple.Setup hiding (Flag)
+ import Distribution.System
+@@ -21,6 +22,9 @@ import System.Environment
+ #if MIN_VERSION_Cabal(3,8,1)
+ #define MIN_VERSION_Cabal_3_8_1
+ #endif
++#if MIN_VERSION_Cabal(3,12,0)
++#define MIN_VERSION_Cabal_3_12_0
++#endif
+ #endif
+ 
+ -- define these selectively in C files (we are _not_ using HsFFI.h),
+@@ -185,14 +189,21 @@ main = do
+               where origHsc buildInfo' =
+                       fromMaybe
+                         ppHsc2hs
++#ifdef MIN_VERSION_Cabal_3_12_0
++                        (lookup (Suffix "hsc") origHookedPreprocessors)
++#else
+                         (lookup "hsc" origHookedPreprocessors)
++#endif
+                         buildInfo'
+                         localBuildInfo
+ #ifdef MIN_VERSION_Cabal_2_0_0
+                         componentLocalBuildInfo
+ #endif
++#ifdef MIN_VERSION_Cabal_3_12_0
++      in [(Suffix "hsc", newHsc)] ++ origHookedPreprocessors,
++#else
+       in [("hsc", newHsc)] ++ origHookedPreprocessors,
+-
++#endif
+     buildHook = \packageDesc localBuildInfo userHooks buildFlags ->
+       do addLLVMToLdLibraryPath (configFlags localBuildInfo)
+          buildHook origUserHooks packageDesc localBuildInfo userHooks buildFlags,
+diff --git a/llvm-hs/llvm-hs.cabal b/llvm-hs/llvm-hs.cabal
+index 27221bc..072652a 100644
+--- a/llvm-hs/llvm-hs.cabal
++++ b/llvm-hs/llvm-hs.cabal
+@@ -66,8 +66,8 @@ library
+   default-language: Haskell2010
+   hs-source-dirs: src
+ 
+-  build-tool-depends:
+-    hsc2hs:hsc2hs
++  -- build-tool-depends:
++  --   hsc2hs:hsc2hs
+ 
+   ghc-options:
+     -O2
+diff --git a/llvm-hs/src/LLVM/Internal/Attribute.hs b/llvm-hs/src/LLVM/Internal/Attribute.hs
+index 0b4dd8e..2100258 100644
+--- a/llvm-hs/src/LLVM/Internal/Attribute.hs
++++ b/llvm-hs/src/LLVM/Internal/Attribute.hs
+@@ -98,15 +98,13 @@ instance Monad m => EncodeM m A.FA.FunctionAttribute (Ptr FFI.FunctionAttrBuilde
+       liftIO $ FFI.attrBuilderAddVScaleRange b vsMin' vsMax'
+     A.FA.StackAlignment v -> liftIO $ FFI.attrBuilderAddStackAlignment b v
+     A.FA.UWTable -> liftIO $ FFI.attrBuilderAddUWTable b
++    A.FA.Memory me -> foldMemoryEffects b me
+     _ -> liftIO $ FFI.attrBuilderAddFunctionAttributeKind b $ case a of
+       A.FA.AlwaysInline -> FFI.functionAttributeKindAlwaysInline
+-      A.FA.ArgMemOnly -> FFI.functionAttributeKindArgMemOnly
+       A.FA.Builtin -> FFI.functionAttributeKindBuiltin
+       A.FA.Cold -> FFI.functionAttributeKindCold
+       A.FA.Convergent -> FFI.functionAttributeKindConvergent
+       A.FA.Hot -> FFI.functionAttributeKindHot
+-      A.FA.InaccessibleMemOnly -> FFI.functionAttributeKindInaccessibleMemOnly
+-      A.FA.InaccessibleMemOrArgMemOnly -> FFI.functionAttributeKindInaccessibleMemOrArgMemOnly
+       A.FA.InlineHint -> FFI.functionAttributeKindInlineHint
+       A.FA.JumpTable -> FFI.functionAttributeKindJumpTable
+       A.FA.MinimizeSize -> FFI.functionAttributeKindMinSize
+@@ -209,13 +207,10 @@ instance DecodeM DecodeAST A.FA.FunctionAttribute FFI.FunctionAttribute where
+              x' <- decodeM =<< peek x
+              return (A.FA.AllocSize x' y)
+            [functionAttributeKindP|AlwaysInline|] -> return A.FA.AlwaysInline
+-           [functionAttributeKindP|ArgMemOnly|] -> return A.FA.ArgMemOnly
+            [functionAttributeKindP|Builtin|] -> return A.FA.Builtin
+            [functionAttributeKindP|Cold|] -> return A.FA.Cold
+            [functionAttributeKindP|Convergent|] -> return A.FA.Convergent
+            [functionAttributeKindP|Hot|] -> return A.FA.Hot
+-           [functionAttributeKindP|InaccessibleMemOnly|] -> return A.FA.InaccessibleMemOnly
+-           [functionAttributeKindP|InaccessibleMemOrArgMemOnly|] -> return A.FA.InaccessibleMemOrArgMemOnly
+            [functionAttributeKindP|InlineHint|] -> return A.FA.InlineHint
+            [functionAttributeKindP|JumpTable|] -> return A.FA.JumpTable
+            [functionAttributeKindP|MinSize|] -> return A.FA.MinimizeSize
+@@ -252,6 +247,7 @@ instance DecodeM DecodeAST A.FA.FunctionAttribute FFI.FunctionAttribute where
+            [functionAttributeKindP|ShadowCallStack|] -> return A.FA.ShadowCallStack
+            [functionAttributeKindP|Speculatable|] -> return A.FA.Speculatable
+            [functionAttributeKindP|SpeculativeLoadHardening|] -> return A.FA.SpeculativeLoadHardening
++           [functionAttributeKindP|Memory|] -> return A.FA.Memory `ap` (liftIO (FFI.attributeValueAsInt a) >>= decomposeMemoryEffects)
+            [functionAttributeKindP|StackAlignment|] -> return A.FA.StackAlignment `ap` (liftIO $ FFI.attributeValueAsInt a)
+            [functionAttributeKindP|StackProtectReq|] -> return A.FA.StackProtectReq
+            [functionAttributeKindP|StackProtectStrong|] -> return A.FA.StackProtectStrong
+@@ -278,6 +274,46 @@ allocaAttrBuilder (context) = do
+     FFI.destroyAttrBuilder ab
+     return r
+ 
++decomposeMemoryEffects :: (Monad m, MonadAnyCont IO m, MonadIO m) =>  Word64 -> m (A.FA.MemoryEffects A.FA.MemoryAccess)
++decomposeMemoryEffects bits = do
++  size <- liftIO FFI.memoryEffectsSize
++  mePtr <- allocaBytes (fromIntegral size)
++  liftIO $ FFI.createMemoryEffectsFromInt (fromIntegral bits) mePtr
++  (argAcc, inaccAcc, otherAcc) <- (,,) <$>  alloca <*> alloca <*> alloca
++  anyContToM $ \f -> do
++    FFI.memoryAccessForLoc mePtr 0 argAcc *> FFI.memoryAccessForLoc mePtr 1 inaccAcc *> FFI.memoryAccessForLoc mePtr 2 otherAcc
++    (other, arg, inacc) <- (,,) <$> readAccess otherAcc <*> readAccess argAcc <*> readAccess inaccAcc
++    f $ A.FA.Exact (A.FA.Other other) `A.FA.Union` A.FA.Exact (A.FA.Argmem arg) `A.FA.Union` A.FA.Exact (A.FA.Inaccessiblemem inacc)
++  where
++    readAccess i = toEnum  . fromIntegral <$> peek i
++
++foldMemoryEffects :: (Monad m, MonadAnyCont IO m, MonadIO m) => Ptr FFI.FunctionAttrBuilder -> A.FA.MemoryEffects A.FA.MemoryAccess -> m ()
++foldMemoryEffects ab me = do
++  mePtr <- go me
++  anyContToM (FFI.attrBuilderAddMemoryEffects ab mePtr >>=)
++  where
++    encodeAccess loc acc = do
++      size <- liftIO FFI.memoryEffectsSize
++      mePtr <- allocaBytes (fromIntegral size)
++      anyContToM $ \f -> do
++        FFI.constructMemoryEffects loc (fromIntegral . fromEnum $ acc) mePtr
++        f mePtr
++
++    go (A.FA.Exact loc) = case loc of
++      A.FA.Other acc -> encodeAccess 2 acc
++      A.FA.Inaccessiblemem acc -> encodeAccess 1 acc
++      A.FA.Argmem acc -> encodeAccess 0 acc
++    go (A.FA.Union me me') = do
++      (mePtr, mePtr') <- (,) <$> go me <*> go me'
++      anyContToM $ \f -> do
++        FFI.memoryEffectsUnionInPlace mePtr mePtr'
++        f mePtr
++    go (A.FA.Intersect me me') = do
++      (mePtr, mePtr') <- (,) <$> go me <*> go me'
++      anyContToM $ \f -> do
++        FFI.memoryEffectsIntersectInPlace mePtr mePtr'
++        f mePtr
++
+ instance forall a b. EncodeM EncodeAST a (Ptr (FFI.AttrBuilder b) -> EncodeAST ()) =>
+          EncodeM EncodeAST [a] (FFI.AttributeSet b) where
+   encodeM as = do
+diff --git a/llvm-hs/src/LLVM/Internal/Coding.hs b/llvm-hs/src/LLVM/Internal/Coding.hs
+index d8f47d7..5f8b45f 100644
+--- a/llvm-hs/src/LLVM/Internal/Coding.hs
++++ b/llvm-hs/src/LLVM/Internal/Coding.hs
+@@ -51,6 +51,9 @@ allocaArray p = anyContToM $ Foreign.Marshal.Array.allocaArray (fromIntegral p)
+ alloca :: (Storable a, MonadAnyCont IO m) => m (Ptr a)
+ alloca = anyContToM Foreign.Marshal.Alloc.alloca
+ 
++allocaBytes :: (MonadAnyCont IO m) => Int -> m (Ptr a)
++allocaBytes s = anyContToM (Foreign.Marshal.Alloc.allocaBytes s)
++
+ peek :: (Storable a, MonadIO m) => Ptr a -> m a
+ peek p = liftIO $ Foreign.Storable.peek p
+ 
+diff --git a/llvm-hs/src/LLVM/Internal/ExecutionEngine.hs b/llvm-hs/src/LLVM/Internal/ExecutionEngine.hs
+index 0f05149..83d364f 100644
+--- a/llvm-hs/src/LLVM/Internal/ExecutionEngine.hs
++++ b/llvm-hs/src/LLVM/Internal/ExecutionEngine.hs
+@@ -24,7 +24,7 @@ import qualified LLVM.Internal.FFI.LLVMCTypes as FFI
+ 
+ import LLVM.Internal.Module
+ import LLVM.Internal.Context
+-import LLVM.Internal.Coding
++import LLVM.Internal.Coding hiding (allocaBytes)
+ import qualified LLVM.CodeModel as CodeModel
+ import LLVM.Internal.Target
+ import qualified LLVM.AST as A
+diff --git a/llvm-hs/src/LLVM/Internal/FFI/Attribute.h b/llvm-hs/src/LLVM/Internal/FFI/Attribute.h
+index 2f12fa0..5d295cc 100644
+--- a/llvm-hs/src/LLVM/Internal/FFI/Attribute.h
++++ b/llvm-hs/src/LLVM/Internal/FFI/Attribute.h
+@@ -9,7 +9,6 @@
+   macro(AllocAlign,T,F,F)                           \
+   macro(AllocatedPointer,T,F,F)                     \
+   macro(AlwaysInline,F,F,T)                         \
+-  macro(ArgMemOnly,F,F,T)                           \
+   macro(Builtin,F,F,T)                              \
+   macro(Cold,F,F,T)                                 \
+   macro(Convergent,F,F,T)                           \
+@@ -18,8 +17,6 @@
+   macro(Hot,F,F,T)                                  \
+   macro(ImmArg,T,F,F)                               \
+   macro(InReg,T,T,F)                                \
+-  macro(InaccessibleMemOnly,F,F,T)                  \
+-  macro(InaccessibleMemOrArgMemOnly,F,F,T)          \
+   macro(InlineHint,F,F,T)                           \
+   macro(JumpTable,F,F,T)                            \
+   macro(MinSize,F,F,T)                              \
+@@ -88,6 +85,7 @@
+   macro(AllocSize,F,F,T)                            \
+   macro(Dereferenceable,T,T,F)                      \
+   macro(DereferenceableOrNull,T,T,F)                \
++  macro(Memory, F, F, T)                            \
+   macro(StackAlignment,F,F,T)                       \
+   macro(UWTable,F,F,T)                              \
+   macro(VScaleRange,F,F,T)                          \
+diff --git a/llvm-hs/src/LLVM/Internal/FFI/Attribute.hs b/llvm-hs/src/LLVM/Internal/FFI/Attribute.hs
+index fad9edd..58f290c 100644
+--- a/llvm-hs/src/LLVM/Internal/FFI/Attribute.hs
++++ b/llvm-hs/src/LLVM/Internal/FFI/Attribute.hs
+@@ -36,11 +36,13 @@ data ParameterAttributeType
+ data AttributeImpl a
+ data AttributeSetImpl a
+ data AttributeListImpl
++data MemoryEffectsImpl
+ 
+ type Attribute a = Ptr (AttributeImpl a)
+ type FunctionAttribute = Attribute FunctionAttributeType
+ type ParameterAttribute = Attribute ParameterAttributeType
+ newtype AttributeIndex = AttributeIndex CUInt
++type MemoryEffectsType = Ptr MemoryEffectsImpl
+ 
+ type AttributeSet a = Ptr (AttributeSetImpl a)
+ -- type MixedAttributeSet = AttributeSet MixedAttributeType
+@@ -185,3 +187,29 @@ foreign import ccall unsafe "LLVM_Hs_AttributeGetVScaleRangeArgs" attributeGetVS
+ 
+ foreign import ccall unsafe "LLVM_Hs_AttrBuilderAddVScaleRange" attrBuilderAddVScaleRange ::
+   Ptr FunctionAttrBuilder -> CUInt -> CUInt -> IO ()
++
++foreign import ccall unsafe "LLVM_Hs_AttributeGetMemoryEffects" attributeGetMemoryEffects ::
++  FunctionAttribute -> Ptr MemoryEffectsImpl -> IO ()
++
++foreign import ccall unsafe "LLVM_Hs_AttrBuilderAddMemoryAttr" attrBuilderAddMemoryEffects ::
++  Ptr FunctionAttrBuilder -> Ptr MemoryEffectsImpl -> IO ()
++
++foreign import ccall unsafe "LLVM_Hs_ConstructMemoryEffects" constructMemoryEffects ::
++  CUInt -> CUInt -> Ptr MemoryEffectsImpl -> IO ()
++
++foreign import ccall unsafe "LLVM_Hs_DisposeMemoryEffects" disposeMemoryEffects ::
++  Ptr MemoryEffectsImpl -> IO ()
++
++foreign import ccall unsafe "LLVM_Hs_MemoryEffectsCreateFromIntValue" createMemoryEffectsFromInt ::
++  Word32 -> Ptr MemoryEffectsImpl -> IO ()
++
++foreign import ccall unsafe "LLVM_Hs_MemoryEffectsGetModRefLoc" memoryAccessForLoc ::
++  Ptr MemoryEffectsImpl -> CUInt -> Ptr CUInt -> IO ()
++
++foreign import ccall unsafe "LLVM_Hs_MemoryEffectsSize" memoryEffectsSize :: IO CSize
++
++foreign import ccall unsafe "LLVM_Hs_MemoryEffectsUnionInPlace" memoryEffectsUnionInPlace ::
++  Ptr MemoryEffectsImpl -> Ptr MemoryEffectsImpl -> IO ()
++
++foreign import ccall unsafe "LLVM_Hs_MemoryEffectsIntersectInPlace" memoryEffectsIntersectInPlace ::
++  Ptr MemoryEffectsImpl -> Ptr MemoryEffectsImpl -> IO ()
+diff --git a/llvm-hs/src/LLVM/Internal/FFI/AttributeC.cpp b/llvm-hs/src/LLVM/Internal/FFI/AttributeC.cpp
+index 05346ea..4e05dda 100644
+--- a/llvm-hs/src/LLVM/Internal/FFI/AttributeC.cpp
++++ b/llvm-hs/src/LLVM/Internal/FFI/AttributeC.cpp
+@@ -3,6 +3,7 @@
+ #include "llvm/IR/DerivedTypes.h"
+ #include "LLVM/Internal/FFI/AttributeC.hpp"
+ #include "llvm/IR/LLVMContext.h"
++#include "llvm/Support/ModRef.h"
+ 
+ #include <tuple>
+ 
+@@ -149,9 +150,9 @@ void LLVM_Hs_AttrBuilderAddUWTable(AttrBuilder &ab) {
+ void LLVM_Hs_AttrBuilderAddAllocSize(AttrBuilder &ab, unsigned x, unsigned y,
+                                      LLVMBool optionalIsThere) {
+     if (optionalIsThere) {
+-        ab.addAllocSizeAttr(x, Optional<unsigned>(y));
++        ab.addAllocSizeAttr(x, std::optional<unsigned>(y));
+     } else {
+-        ab.addAllocSizeAttr(x, Optional<unsigned>());
++        ab.addAllocSizeAttr(x, std::optional<unsigned>());
+     }
+ }
+ 
+@@ -185,4 +186,41 @@ void LLVM_Hs_AttrBuilderAddVScaleRange(AttrBuilder &ab, unsigned min, unsigned m
+   ab.addVScaleRangeAttr(min, max);
+ }
+ 
++void LLVM_Hs_AttributeGetMemoryEffects(LLVMAttributeRef a, MemoryEffects *me) {
++    *me = unwrap(a).getMemoryEffects();
++}
++
++void LLVM_Hs_AttrBuilderAddMemoryAttr(AttrBuilder &ab, MemoryEffects *me) {
++    ab.addMemoryAttr(*me);
++}
++
++void LLVM_Hs_ConstructMemoryEffects(unsigned loc, unsigned modref, MemoryEffects *me) {
++    *me = MemoryEffects(static_cast<MemoryEffects::Location>(loc),
++                        static_cast<ModRefInfo>(modref));
++}
++
++void LLVM_Hs_DisposeMemoryEffects(MemoryEffects *me) { delete me; }
++
++void LLVM_Hs_MemoryEffectsCreateFromIntValue(uint32_t data, MemoryEffects *me) {
++    *me = MemoryEffects::createFromIntValue(data);
++}
++
++void LLVM_Hs_MemoryEffectsUnionInPlace(MemoryEffects &me, MemoryEffects *me2) { me |= *me2; }
++
++void LLVM_Hs_MemoryEffectsIntersectInPlace(MemoryEffects &me, MemoryEffects *me2) { me &= *me2; }
++
++void LLVM_Hs_MemoryEffectsUnion(MemoryEffects me, MemoryEffects me2, MemoryEffects* mer) { *mer = me | me2; }
++
++void LLVM_Hs_MemoryEffectsIntersect(MemoryEffects me, MemoryEffects me2, MemoryEffects* mer) { *mer = me & me2; }
++
++void LLVM_Hs_MemoryEffectsGetModRef(MemoryEffects &me, unsigned *mr) {
++    *mr = static_cast<unsigned>(me.getModRef());
++}
++
++void LLVM_Hs_MemoryEffectsGetModRefLoc(MemoryEffects &me, unsigned loc, unsigned *mr) {
++    *mr = static_cast<unsigned>(me.getModRef(static_cast<MemoryEffects::Location>(loc)));
++}
++
++size_t LLVM_Hs_MemoryEffectsSize() { return sizeof(MemoryEffects); }
++
+ }
+diff --git a/llvm-hs/src/LLVM/Internal/FFI/BuilderC.cpp b/llvm-hs/src/LLVM/Internal/FFI/BuilderC.cpp
+index d02c04b..6bc54b8 100644
+--- a/llvm-hs/src/LLVM/Internal/FFI/BuilderC.cpp
++++ b/llvm-hs/src/LLVM/Internal/FFI/BuilderC.cpp
+@@ -375,7 +375,7 @@ LLVMValueRef LLVM_Hs_BuildCleanupPad(LLVMBuilderRef b, LLVMValueRef parentPad,
+                                      LLVMValueRef *args, unsigned numArgs,
+                                      const char *name) {
+   return wrap(unwrap(b)->CreateCleanupPad(unwrap(parentPad),
+-                                          makeArrayRef(unwrap(args), numArgs),
++                                          ArrayRef<Value*>(unwrap(args), numArgs),
+                                           name));
+ }
+ 
+@@ -383,7 +383,7 @@ LLVMValueRef LLVM_Hs_BuildCatchPad(LLVMBuilderRef b, LLVMValueRef catchSwitch,
+                                    LLVMValueRef *args, unsigned numArgs,
+                                    const char *name) {
+     return wrap(unwrap(b)->CreateCatchPad(unwrap(catchSwitch),
+-                                          makeArrayRef(unwrap(args), numArgs),
++                                          ArrayRef<Value*>(unwrap(args), numArgs),
+                                           name));
+ }
+ 
+diff --git a/llvm-hs/src/LLVM/Internal/FFI/InstructionC.cpp b/llvm-hs/src/LLVM/Internal/FFI/InstructionC.cpp
+index da1fd65..51e3d7f 100644
+--- a/llvm-hs/src/LLVM/Internal/FFI/InstructionC.cpp
++++ b/llvm-hs/src/LLVM/Internal/FFI/InstructionC.cpp
+@@ -292,7 +292,7 @@ LLVMValueRef LLVM_Hs_GetParentPad(LLVMValueRef i) {
+ }
+ 
+ unsigned LLVM_Hs_GetNumArgOperands(LLVMValueRef i) {
+-    return unwrap<FuncletPadInst>(i)->getNumArgOperands();
++    return unwrap<FuncletPadInst>(i)->arg_size();
+ }
+ 
+ LLVMValueRef LLVM_Hs_GetArgOperand(LLVMValueRef i, unsigned op) {
+diff --git a/llvm-hs/src/LLVM/Internal/FFI/Metadata.hs b/llvm-hs/src/LLVM/Internal/FFI/Metadata.hs
+index d902757..9e5a5af 100644
+--- a/llvm-hs/src/LLVM/Internal/FFI/Metadata.hs
++++ b/llvm-hs/src/LLVM/Internal/FFI/Metadata.hs
+@@ -471,7 +471,7 @@ foreign import ccall unsafe "LLVM_Hs_Get_DICompileUnit" getDICompileUnit ::
+   CUInt -> Ptr MDString -> DebugEmissionKind -> TupleArray DICompositeType -> TupleArray DIScope ->
+   TupleArray DIGlobalVariableExpression -> TupleArray DIImportedEntity -> TupleArray DIMacroNode ->
+   Word64 -> LLVMBool ->
+-  LLVMBool -> DebugNameTableKind -> LLVMBool ->
++  LLVMBool -> DebugNameTableKind -> LLVMBool -> Ptr MDString -> Ptr MDString ->
+   IO (Ptr DICompileUnit)
+ 
+ foreign import ccall unsafe "LLVM_Hs_DICompileUnit_GetLanguage" getDICompileUnitLanguage ::
+@@ -525,6 +525,12 @@ foreign import ccall unsafe "LLVM_Hs_DICompileUnit_GetMacros" getDICompileUnitMa
+ foreign import ccall unsafe "LLVM_Hs_DICompileUnit_GetRangesBaseAddress" getDICompileUnitRangesBaseAddress ::
+   Ptr DICompileUnit -> IO LLVMBool
+ 
++foreign import ccall unsafe "LLVM_Hs_DICompileUnit_GetSysroot" getDICompileUnitSysroot ::
++  Ptr DICompileUnit -> IO (Ptr MDString)
++
++foreign import ccall unsafe "LLVM_Hs_DICompileUnit_GetSDK" getDICompileUnitSDK ::
++  Ptr DICompileUnit -> IO (Ptr MDString)
++
+ -- DIFlags
+ foreign import ccall unsafe "LLVM_Hs_DIFlags_GetFlag" getDIFlag ::
+   CString -> IO DIFlags
+diff --git a/llvm-hs/src/LLVM/Internal/FFI/MetadataC.cpp b/llvm-hs/src/LLVM/Internal/FFI/MetadataC.cpp
+index 93e8f16..a00c5af 100644
+--- a/llvm-hs/src/LLVM/Internal/FFI/MetadataC.cpp
++++ b/llvm-hs/src/LLVM/Internal/FFI/MetadataC.cpp
+@@ -9,6 +9,7 @@
+ #include "llvm/IR/Metadata.h"
+ #include "llvm/IR/DebugInfoMetadata.h"
+ #include "llvm-c/Core.h"
++#include "llvm/ADT/Optional.h"
+ 
+ using namespace llvm;
+ 
+@@ -763,6 +764,14 @@ LLVMBool LLVM_Hs_DICompileUnit_GetRangesBaseAddress(DICompileUnit* cu) {
+     return cu->getRangesBaseAddress();
+ }
+ 
++MDString* LLVM_Hs_DICompileUnit_GetSysroot(DICompileUnit* cu) {
++    return cu->getRawSysRoot();
++}
++
++MDString* LLVM_Hs_DICompileUnit_GetSDK(DICompileUnit* cu) {
++    return cu->getRawSDK();
++}
++
+ // DIFlags
+ 
+ // This is mainly intended for testing purposes
+diff --git a/llvm-hs/src/LLVM/Internal/FFI/TargetC.cpp b/llvm-hs/src/LLVM/Internal/FFI/TargetC.cpp
+index c6746fc..c5d33c7 100644
+--- a/llvm-hs/src/LLVM/Internal/FFI/TargetC.cpp
++++ b/llvm-hs/src/LLVM/Internal/FFI/TargetC.cpp
+@@ -7,6 +7,7 @@
+ #include "llvm-c/Target.h"
+ #include "llvm-c/TargetMachine.h"
+ #include "llvm/ADT/Triple.h"
++#include "llvm/ADT/Optional.h"
+ #include "llvm/Analysis/TargetLibraryInfo.h"
+ #include "llvm/ExecutionEngine/Interpreter.h"
+ #include "llvm/IR/DataLayout.h"
+diff --git a/llvm-hs/src/LLVM/Internal/Operand.hs b/llvm-hs/src/LLVM/Internal/Operand.hs
+index 59ac6d5..857d5ed 100644
+--- a/llvm-hs/src/LLVM/Internal/Operand.hs
++++ b/llvm-hs/src/LLVM/Internal/Operand.hs
+@@ -465,6 +465,8 @@ instance DecodeM DecodeAST A.DICompileUnit (Ptr FFI.DICompileUnit) where
+     macros <- decodeM =<< liftIO (FFI.getDICompileUnitMacros p)
+     nameTableKind <- decodeM =<< liftIO (FFI.getDICompileUnitNameTableKind p)
+     rangesBaseAddress <- decodeM =<< liftIO (FFI.getDICompileUnitRangesBaseAddress p)
++    sysroot <- decodeM =<< liftIO (FFI.getDICompileUnitSysroot p)
++    sdk <- decodeM =<< liftIO (FFI.getDICompileUnitSDK p)
+     pure A.CompileUnit
+       { A.language = language
+       , A.file = file
+@@ -484,6 +486,8 @@ instance DecodeM DecodeAST A.DICompileUnit (Ptr FFI.DICompileUnit) where
+       , A.debugInfoForProfiling = debugInfoForProfiling
+       , A.nameTableKind = nameTableKind
+       , A.rangesBaseAddress = rangesBaseAddress
++      , A.sysroot = sysroot
++      , A.sdk = sdk
+       }
+ 
+ instance EncodeM EncodeAST A.DICompileUnit (Ptr FFI.DICompileUnit) where
+@@ -506,13 +510,15 @@ instance EncodeM EncodeAST A.DICompileUnit (Ptr FFI.DICompileUnit) where
+     debugInfoForProfiling <- encodeM debugInfoForProfiling
+     nameTableKind <- encodeM nameTableKind
+     rangesBaseAddress <- encodeM rangesBaseAddress
++    sysroot <- encodeM sysroot
++    sdk <- encodeM sdk
+     Context c <- gets encodeStateContext
+     liftIO $ FFI.getDICompileUnit
+       c
+       language file producer optimized flags
+       runtimeVersion debugFileName emissionKind enums retainedTypes
+       globals imports macros dwoid splitDebugInlining
+-      debugInfoForProfiling nameTableKind rangesBaseAddress
++      debugInfoForProfiling nameTableKind rangesBaseAddress sysroot sdk
+ 
+ instance EncodeM EncodeAST A.DIScope (Ptr FFI.DIScope) where
+   encodeM (A.DIFile f) = FFI.upCast <$> (encodeM f :: EncodeAST (Ptr FFI.DIFile))
+diff --git a/llvm-hs/test/LLVM/Test/Attribute.hs b/llvm-hs/test/LLVM/Test/Attribute.hs
+index 0fd81a8..99dfa8d 100644
+--- a/llvm-hs/test/LLVM/Test/Attribute.hs
++++ b/llvm-hs/test/LLVM/Test/Attribute.hs
+@@ -74,12 +74,9 @@ moduleAst =
+       , FunctionAttributes
+           (GroupID 0)
+           [ AlwaysInline
+-          , ArgMemOnly
+           , Builtin
+           , Cold
+           , Convergent
+-          , InaccessibleMemOnly
+-          , InaccessibleMemOrArgMemOnly
+           , InlineHint
+           , JumpTable
+           , MinimizeSize
+@@ -95,8 +92,6 @@ moduleAst =
+           , NonLazyBind
+           , OptimizeForSize
+           , OptimizeNone
+-          , ReadNone
+-          , ReadOnly
+           , ReturnsTwice
+           , SafeStack
+           , SanitizeAddress
+@@ -105,8 +100,8 @@ moduleAst =
+           , StackProtect
+           , StackProtectReq
+           , StackProtectStrong
+-          , WriteOnly
+           , AllocSize 8 (Just 16)
++          , Memory (Union (Union (Exact (Other None)) (Exact (Argmem None))) (Exact (Inaccessiblemem None)))
+           , StackAlignment 8
+           , UWTable
+           , StringAttribute "bar" "baz"
+diff --git a/llvm-hs/test/LLVM/Test/DataLayout.hs b/llvm-hs/test/LLVM/Test/DataLayout.hs
+index 61d6216..d6b38ae 100644
+--- a/llvm-hs/test/LLVM/Test/DataLayout.hs
++++ b/llvm-hs/test/LLVM/Test/DataLayout.hs
+@@ -38,9 +38,9 @@ tests = testGroup "DataLayout" $
+       size @?= 1
+       size <-
+         withFFIDataLayout
+-          (ddl { typeLayouts = Map.singleton (IntegerAlign, 8) (AlignmentInfo 32 32) })
++          (ddl { typeLayouts = Map.singleton (IntegerAlign, 8) (AlignmentInfo 8 8) })
+           (\dl -> getTypeAllocSize dl ty)
+-      size @?= 4)
++      size @?= 1)
+   :
+   [
+   testCase name $ strCheckC (Module "<string>" "<string>" mdl Nothing []) (m sdl) (m sdlc)
+@@ -51,27 +51,27 @@ tests = testGroup "DataLayout" $
+    | (name, mdl, sdl, msdlc) <- [
+     ("little-endian", defaultDataLayout LittleEndian, "e", Nothing),
+     ("big-endian", defaultDataLayout BigEndian, "E", Nothing),
+-    ("native", ddl { nativeSizes = Just (Set.fromList [8,32]) }, "E-n8:32", Nothing),
++    ("native", ddl { nativeSizes = Just (Set.fromList [8,8]) }, "E-n8", Nothing),
+     (
+      "no pref",
+      ddl {
+-       pointerLayouts = 
++       pointerLayouts =
+          Map.singleton
+-         (AddrSpace 0) 
++         (AddrSpace 0)
+          (
+           8,
+-          AlignmentInfo 64 64
++          AlignmentInfo 8 8
+          )
+      },
+-     "E-p:8:64",
++     "E-p:8:8",
+      Nothing
+     ), (
+      "no pref",
+      ddl {
+-       pointerLayouts = 
+-         Map.insert (AddrSpace 1) (8, AlignmentInfo 32 64) (pointerLayouts ddl)
++       pointerLayouts =
++         Map.insert (AddrSpace 1) (8, AlignmentInfo 8 8) (pointerLayouts ddl)
+      },
+-     "E-p1:8:32:64",
++     "E-p1:8:8",
+      Nothing
+     ), (
+      "big",
+@@ -80,7 +80,7 @@ tests = testGroup "DataLayout" $
+        mangling = Just ELFMangling,
+        stackAlignment = Just 128,
+        pointerLayouts = Map.fromList [
+-         (AddrSpace 0, (8, AlignmentInfo 8 16))
++         (AddrSpace 0, (8, AlignmentInfo 8 8))
+         ],
+        typeLayouts = Map.fromList [
+          ((IntegerAlign, 1), AlignmentInfo 8 256),
+@@ -93,11 +93,11 @@ tests = testGroup "DataLayout" $
+          ((FloatAlign, 32), AlignmentInfo 32 256),
+          ((FloatAlign, 64), AlignmentInfo 64 256),
+          ((FloatAlign, 80), AlignmentInfo 128 256)
+-        ] `Map.union` typeLayouts ddl, 
++        ] `Map.union` typeLayouts ddl,
+        aggregateLayout = AlignmentInfo 0 256,
+        nativeSizes = Just (Set.fromList [8,16,32,64])
+      },
+-     "e-m:e-p:8:8:16-i1:8:256-i8:8:256-i16:16:256-i32:32:256-i64:64:256-v64:64:256-v128:128:256-f32:32:256-f64:64:256-f80:128:256-a:0:256-n8:16:32:64-S128",
++     "e-m:e-p:8:8-i1:8:256-i8:8:256-i16:16:256-i32:32:256-i64:64:256-v64:64:256-v128:128:256-f32:32:256-f64:64:256-f80:128:256-a:0:256-n8:16:32:64-S128",
+      Nothing
+     )
+    ]
+diff --git a/llvm-hs/test/LLVM/Test/FunctionAttribute.hs b/llvm-hs/test/LLVM/Test/FunctionAttribute.hs
+index bf09e23..680c98b 100644
+--- a/llvm-hs/test/LLVM/Test/FunctionAttribute.hs
++++ b/llvm-hs/test/LLVM/Test/FunctionAttribute.hs
+@@ -27,13 +27,10 @@ import qualified Data.ByteString.Short                    as B
+ instance Arbitrary FunctionAttribute where
+   arbitrary = oneof
+     [ return AlwaysInline
+-    , return ArgMemOnly
+     , return Builtin
+     , return Cold
+     , return Convergent
+     , return Hot
+-    , return InaccessibleMemOnly
+-    , return InaccessibleMemOrArgMemOnly
+     , return InlineHint
+     , return JumpTable
+     , return MinimizeSize
+diff --git a/llvm-hs/test/LLVM/Test/Metadata.hs b/llvm-hs/test/LLVM/Test/Metadata.hs
+index 692c4e8..5653bf5 100644
+--- a/llvm-hs/test/LLVM/Test/Metadata.hs
++++ b/llvm-hs/test/LLVM/Test/Metadata.hs
+@@ -398,6 +398,8 @@ genDICompileUnit file retained macro =
+     <*> arbitrary
+     <*> arbitrary
+     <*> arbitrary
++    <*> arbitrarySbs
++    <*> arbitrarySbs
+ 
+ instance Arbitrary DebugEmissionKind where
+   arbitrary = QC.elements [NoDebug, FullDebug, LineTablesOnly]
+@@ -942,6 +944,8 @@ globalObjectMetadata = testGroup "Metadata on GlobalObject" $
+                       , debugInfoForProfiling = False
+                       , nameTableKind = NameTableKindDefault
+                       , rangesBaseAddress = False
++                      , sysroot = ""
++                      , sdk = ""
+                       }
+                   , MetadataNodeDefinition (MetadataNodeID 3) $
+                     DINode . DIScope . DIFile $
+@@ -1004,6 +1008,8 @@ globalObjectMetadata = testGroup "Metadata on GlobalObject" $
+                       , debugInfoForProfiling = False
+                       , nameTableKind = NameTableKindDefault
+                       , rangesBaseAddress = False
++                      , sysroot = ""
++                      , sdk = ""
+                       }
+                   , MetadataNodeDefinition (MetadataNodeID 3) $
+                     DINode . DIVariable . DIGlobalVariable $
+diff --git a/llvm-hs/test/LLVM/Test/Module.hs b/llvm-hs/test/LLVM/Test/Module.hs
+index 533f591..2d77487 100644
+--- a/llvm-hs/test/LLVM/Test/Module.hs
++++ b/llvm-hs/test/LLVM/Test/Module.hs
+@@ -68,7 +68,7 @@ handString = "; ModuleID = '<string>'\n\
+     \  ret i32 %1\n\
+     \}\n\
+     \\n\
+-    \; Function Attrs: nounwind readnone uwtable\n\
++    \; Function Attrs: nounwind memory(none) uwtable\n\
+     \define zeroext i32 @foo(i32 inreg %x, i8 signext %y) #0 {\n\
+     \  %1 = mul nsw i32 %x, %x\n\
+     \  br label %here\n\
+@@ -86,7 +86,7 @@ handString = "; ModuleID = '<string>'\n\
+     \  ret i32 %r\n\
+     \}\n\
+     \\n\
+-    \attributes #0 = { nounwind readnone uwtable \"eep\" }\n"
++    \attributes #0 = { nounwind memory(none) uwtable \"eep\" }\n"
+ 
+ handAST = Module "<string>" "<string>" Nothing Nothing [
+       TypeDefinition (UnName 0) (
+@@ -264,7 +264,7 @@ handAST = Module "<string>" "<string>" Nothing Nothing [
+            )
+          ]
+         },
+-      FunctionAttributes (FA.GroupID 0) [FA.NoUnwind, FA.ReadNone, FA.UWTable, FA.StringAttribute "eep" ""],
++      FunctionAttributes (FA.GroupID 0) [FA.NoUnwind, FA.Memory (FA.Union (FA.Union (FA.Exact (FA.Other FA.None)) (FA.Exact (FA.Argmem FA.None))) (FA.Exact (FA.Inaccessiblemem FA.None))), FA.UWTable, FA.StringAttribute "eep" ""],
+       COMDAT "bob" COMDAT.Largest
+      ]
+ 
+diff --git a/llvm-hs/test/LLVM/Test/Optimization.hs b/llvm-hs/test/LLVM/Test/Optimization.hs
+index 27586b6..def8ec9 100644
+--- a/llvm-hs/test/LLVM/Test/Optimization.hs
++++ b/llvm-hs/test/LLVM/Test/Optimization.hs
+@@ -27,6 +27,7 @@ import qualified LLVM.AST.Linkage as L
+ import qualified LLVM.AST.Visibility as V
+ import qualified LLVM.AST.CallingConvention as CC
+ import qualified LLVM.AST.Attribute as A
++import qualified LLVM.AST.FunctionAttribute as A
+ import qualified LLVM.AST.Global as G
+ import qualified LLVM.AST.Constant as C
+ 
+@@ -120,6 +121,8 @@ tests = testGroup "Optimization" [
+             )
+           ]
+         },
+-      FunctionAttributes (A.GroupID 0) [A.MustProgress, A.NoFree, A.NoRecurse, A.NoSync, A.NoUnwind, A.ReadNone, A.WillReturn, A.UWTable]
++      FunctionAttributes (A.GroupID 0) [A.MustProgress, A.NoFree, A.NoRecurse, A.NoSync, A.NoUnwind, A.ReadNone, A.WillReturn
++                                       , A.Memory (A.Union (A.Union (A.Exact (A.Other A.None)) (A.Exact (A.Argmem A.None))) (A.Exact (A.Inaccessiblemem A.None)))
++                                       , A.UWTable]
+       ]
+  ]

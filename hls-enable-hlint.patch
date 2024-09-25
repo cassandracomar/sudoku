@@ -1,0 +1,21 @@
+diff --git a/haskell-language-server.cabal b/haskell-language-server.cabal
+index c79d714f..54e7aeb1 100644
+--- a/haskell-language-server.cabal
++++ b/haskell-language-server.cabal
+@@ -693,14 +693,14 @@ flag hlint
+   manual:      True
+ 
+ common hlint
+-  if flag(hlint) && impl(ghc < 9.10)
++  if flag(hlint)
+     build-depends: haskell-language-server:hls-hlint-plugin
+     cpp-options: -Dhls_hlint
+ 
+ library hls-hlint-plugin
+   import:           defaults, pedantic, warnings
+   -- https://github.com/ndmitchell/hlint/pull/1594
+-  if !(flag(hlint) && impl(ghc < 9.10))
++  if !flag(hlint)
+     buildable: False
+   exposed-modules:  Ide.Plugin.Hlint
+   hs-source-dirs:   plugins/hls-hlint-plugin/src

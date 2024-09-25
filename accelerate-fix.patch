@@ -1,0 +1,56 @@
+diff --git a/accelerate.cabal b/accelerate.cabal
+index 6a3c5e40..43bb65f3 100644
+--- a/accelerate.cabal
++++ b/accelerate.cabal
+@@ -339,7 +339,7 @@ flag nofib
+ 
+ library
+   build-depends:
+-          base                          >= 4.12 && < 4.20
++          base                          >= 4.12 && < 4.21
+         , ansi-terminal                 >= 0.6.2
+         , base-orphans                  >= 0.3
+         , bytestring                    >= 0.10.2
+diff --git a/src/Data/Array/Accelerate/Pattern/TH.hs b/src/Data/Array/Accelerate/Pattern/TH.hs
+index b3f43f4a..01d3a9df 100644
+--- a/src/Data/Array/Accelerate/Pattern/TH.hs
++++ b/src/Data/Array/Accelerate/Pattern/TH.hs
+@@ -32,6 +32,7 @@ import Language.Haskell.TH.Extra                                    hiding ( Exp
+ import Numeric
+ import Text.Printf
+ import qualified Language.Haskell.TH.Extra                          as TH
++import Language.Haskell.TH                                          (NamespaceSpecifier (NoNamespaceSpecifier))
+ 
+ import GHC.Stack
+ 
+@@ -181,7 +182,7 @@ mkConP tn' tvs' con' = do
+                      ]
+       r' <- case mf of
+               Nothing -> return r
+-              Just f  -> return (InfixD f pat : r)
++              Just f  -> return (InfixD f NoNamespaceSpecifier pat : r)
+       return (pat, r')
+       where
+         pat = mkName (':' : nameBase cn)
+@@ -273,7 +274,7 @@ mkConS tn' tvs' prev' next' tag' con' = do
+                      ]
+       r' <- case mf of
+               Nothing -> return r
+-              Just f  -> return (InfixD f pat : r)
++              Just f  -> return (InfixD f NoNamespaceSpecifier  pat : r)
+       return r'
+       where
+         sig = forallT
+diff --git a/src/Data/BitSet.hs b/src/Data/BitSet.hs
+index f06169bc..184bc051 100644
+--- a/src/Data/BitSet.hs
++++ b/src/Data/BitSet.hs
+@@ -14,7 +14,7 @@
+ module Data.BitSet where
+ 
+ import Data.Bits
+-import Prelude                                            hiding ( foldl, foldr )
++import Prelude                                            hiding ( foldl, foldr, foldl' )
+ import qualified Data.List                                as List
+ 
+ import GHC.Exts                                           ( IsList, build )
