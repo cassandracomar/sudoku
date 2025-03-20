@@ -63,16 +63,21 @@ library
     import:           warnings
 
     -- Modules exported by the library.
-    exposed-modules:   Sudoku
-    other-modules:   Sudoku.Backtracking
-                   , Sudoku.Cell
+    exposed-modules:  Sudoku.Solver
+                    , Sudoku.Backtracking
+                    , Sudoku.Cell
+                    , Sudoku.Summaries
+                    , Sudoku.Grid
+                    , Sudoku.Tuples
+                    , Sudoku.Simplifiers
+                    , Data.BitSet
 
     -- LANGUAGE extensions used by modules in this package.
     default-extensions:   OverloadedLabels
+                        , OverloadedStrings
 
     -- Other library packages from which modules are imported.
     build-depends:    base >=4.20.0.0
-                    , pipes >= 4.3.16
                     , lens
                     , template-haskell
                     , transformers
@@ -88,15 +93,14 @@ library
                     , data-default
                     , singletons
                     , deepseq
-                    , accelerate
-                    , accelerate-llvm-native
-                    , bitfield
                     , primitive
-                    , containers-accelerate
-                    , lens-accelerate
                     , bifunctors
                     , vector
+                    , vector-th-unbox
                     , singletons-base
+                    , monoidal-containers
+                    , text
+                    , text-show
 
     -- Directories containing source files.
     hs-source-dirs:   src
@@ -164,6 +168,11 @@ test-suite sudoku-test
                     , tasty
                     , tasty-hunit
                     , falsify
+                    , lens
+                    , vector
+                    , falsify
+                    , data-default
+                    , containers
 
 executable sudoku-bench
     -- Import common warning flags.
@@ -182,7 +191,7 @@ executable sudoku-bench
                     , sudoku
                     , criterion
                     , optparse-applicative
-    -- build-tool-depends: proto-lens-protoc:proto-lens-protoc
+                    , lens
 
     -- Directories containing source files.
     hs-source-dirs:   test

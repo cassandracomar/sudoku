@@ -1,0 +1,53 @@
+packages: sudoku.cabal
+multi-repl: True
+ignore-project: False
+profiling-detail: late-toplevel
+library-stripping: True
+executable-stripping: True
+optimization: 2
+executable-profiling: False
+library-profiling: False
+profiling: False
+program-options
+    ghc-options:
+                 -funbox-strict-fields
+                 -- inline aggressively to ensure lenses/polymorphic functions are fully saturated at concrete types
+                 -- we're about 50% slower on the hot path when -fexpose-all-unfoldings, -fspecialise-aggressively,
+                 -- and -fpolymorphic-specialisation are turned off -- despite all the manual INLINE/SPECIALIZE pragmas.
+                 -fexpose-all-unfoldings
+                 -fspecialize-aggressively
+                 -flate-specialise
+                 -fpolymorphic-specialisation
+                 -fstatic-argument-transformation
+                 -- giving the specializer more room to chug makes the generated core more closely match the
+                 -- source program. or at least, I can read it more easily and recognize what's happening
+                 -- where.
+                 -fmax-simplifier-iterations=16
+                 -fsimplifier-phases=8
+                 -fsimpl-tick-factor=200
+                 -funfolding-case-threshold=30
+                 -funfolding-case-scaling=200
+                 -funfolding-use-threshold=200
+                 -- results in a mild speedup, ~5%
+                 -fworker-wrapper-cbv
+                 -flate-dmd-anal
+                 -fdmd-unbox-width=9
+                 -fdicts-cheap
+                 -fkeep-auto-rules
+                 -fdo-clever-arg-eta-expansion
+                 -- -ddump-rules
+                 -- -ddump-rule-firings
+                 -- -ddump-rule-rewrites
+                 -ddump-simpl
+                 -ddump-to-file
+                 -dno-typeable-binds
+                 -dsuppress-coercions
+                 -dsuppress-idinfo
+                 -dsuppress-module-prefixes
+                 -dsuppress-type-applications
+                 -dsuppress-timestamps
+                 -- -fforce-recomp
+                 -- -Wall-missed-specializations
+                 -- -fprof-late
+                 -- -fprof-late-overloaded
+                 -- "-with-rtsopts=-I0 -pa -pj -la -hT -s"

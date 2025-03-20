@@ -22,9 +22,13 @@ cabal.sandbox.config
 *.aux
 *.hp
 *.eventlog
+*.eventlog.json
 .stack-work/
 cabal.project.local
 cabal.project.local~
 .HTF/
 .ghc.environment.*
 *.prof
+bench-report*.html
+.dir-locals.el
+*.dump-simpl

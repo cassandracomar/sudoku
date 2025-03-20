@@ -16,5 +16,5 @@ unicode: never
 respectful: false
 fixities: []
 reexports: []
-import-grouping: by-qualified
+import-grouping: by-scope-then-qualified
 local-modules: [Sudoku]

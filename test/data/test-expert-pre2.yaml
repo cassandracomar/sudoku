@@ -1,0 +1,79 @@
+rows:
+  - row: 1
+    columns:
+      - column: 2
+        value: 2
+      - column: 5
+        value: 9
+      - column: 8
+        value: 1
+  - row: 2
+    columns:
+      - column: 3
+        value: 1
+      - column: 4
+        value: 6
+      - column: 5
+        value: 2
+      - column: 7
+        value: 4
+      - column: 8
+        value: 8
+      - column: 9
+        value: 9
+  - row: 3
+    columns:
+      - column: 2
+        value: 4
+      - column: 3
+        value: 9
+      - column: 4
+        value: 8
+      - column: 9
+        value: 2
+  - row: 4
+    columns:
+      - column: 4
+        value: 1
+      - column: 5
+        value: 7
+      - column: 6
+        value: 5
+      - column: 7
+        value: 2
+  - row: 5
+    columns:
+      - column: 2
+        value: 5
+      - column: 6
+        value: 8
+      - column: 7
+        value: 6
+  - row: 6
+    columns:
+      - column: 3
+        value: 8
+  - row: 7
+    columns:
+      - column: 1
+        value: 9
+      - column: 8
+        value: 7
+  - row: 8
+    columns:
+      - column: 2
+        value: 8
+      - column: 8
+        value: 2
+  - row: 9
+    columns:
+      - column: 1
+        value: 3
+      - column: 2
+        value: 7
+      - column: 3
+        value: 4
+      - column: 6
+        value: 2
+      - column: 8
+        value: 6
