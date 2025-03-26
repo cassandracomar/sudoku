@@ -75,7 +75,8 @@ ixCell loc = grid . cellPos . index loc
 {-# INLINE ixCell #-}
 
 choosePossible ::
-    (Alternative m, MonadLogic m, MonadState (s, Grid a) m, VU.Unbox (Cell a), Enum a) => CellPos -> m (Cell a)
+    (Alternative m, MonadLogic m, MonadState (s, Grid a) m, VU.Unbox (Cell a), Enum a, VU.IsoUnbox a Word16) =>
+    CellPos -> m (Cell a)
 choosePossible loc =
     use (_2 . singular (ixCell loc))
         >>= foldrOf (_Possibly . _CellSet . bsfolded) (view (re _Known . to pure . to interleave)) empty
@@ -91,7 +92,7 @@ of the state while we track values we've contradicted in `loc` in the global sta
 function and the latter is used to update the `Grid` backtracking began on.
 -}
 attemptToContradict ::
-    (Monad m, MonadWriter (BacktrackStateLog a) m, Eq a, Enum a, VU.Unbox (Cell a), Ord a) =>
+    (Monad m, MonadWriter (BacktrackStateLog a) m, Eq a, Enum a, VU.Unbox (Cell a), Ord a, VU.IsoUnbox a Word16) =>
     (SudokuT m a (Grid a) -> SudokuT m a (Grid a)) -> CellPos -> SudokuT m a ()
 attemptToContradict act loc =
     choosePossible loc >>- \cell -> join . backtrack $ do

@@ -3,6 +3,7 @@
 *.log
 tmp/
 .direnv/
+result*
 
 dist
 dist-*

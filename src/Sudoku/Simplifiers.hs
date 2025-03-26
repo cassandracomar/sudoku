@@ -21,8 +21,9 @@ import Data.List (intersperse)
 import Data.Monoid (Sum)
 import Data.Proxy (Proxy (Proxy))
 import Data.Text.Lazy (Text)
+import GHC.Word (Word16)
 import Sudoku.Backtracking (Sudoku)
-import Sudoku.Cell (Cell, CellPos, CellSet (..), Digit, cellPos)
+import Sudoku.Cell (Cell, CellPos, CellSet (..), Digit)
 import Sudoku.Grid (
     Grid,
     SolverOptions,
@@ -117,7 +118,8 @@ class (VU.Unbox (Cell a), Enum a, Ord a, TextShow a) => Simplifier f (s :: Type 
 type CollectedSummaries f a =
     (RegionSummaries (Contradictions a), RegionSummaries (Union (CellSet a)), RegionSummaries (MonoidFor f a))
 
-type SimplifierConstraint f (s :: Type -> Type) a = (Simplifier f s a, Monoid (MonoidFor f a), Ord a, Enum a)
+type SimplifierConstraint f (s :: Type -> Type) a =
+    (Simplifier f s a, Monoid (MonoidFor f a), Ord a, Enum a, VU.IsoUnbox a Word16)
 
 -- | split the `SummaryRecord` GADT into a tuple by unzipping `RegionSummaries` across each region.
 factorSummary ::
@@ -126,17 +128,17 @@ factorSummary ::
     f -> Proxy s -> RegionSummaries (SummaryRecord (MonoidFor f a) a) -> CollectedSummaries f a
 factorSummary _ _ summs = (mk (rs, cs, bs), mk (rs', cs', bs'), mk (rs'', cs'', bs''))
   where
-    unpackSummary (SummaryRecord contras solvedSumms step) = (contras, solvedSumms, step)
-    (rs, rs', rs'') = V.unzip3 $ V.map unpackSummary (summs ^. rows . byRegion)
-    (cs, cs', cs'') = V.unzip3 $ V.map unpackSummary (summs ^. columns . byRegion)
-    (bs, bs', bs'') = V.unzip3 $ V.map unpackSummary (summs ^. boxes . byRegion)
-    mk (r, c, b) = def & rows . byRegion .~ r & columns . byRegion .~ c & boxes . byRegion .~ b
+    unpackSummary (SummaryRecord !contras !solvedSumms !step) = (contras, solvedSumms, step)
+    (!rs, !rs', !rs'') = V.unzip3 $ V.map unpackSummary (summs ^. rows . byRegion)
+    (!cs, !cs', !cs'') = V.unzip3 $ V.map unpackSummary (summs ^. columns . byRegion)
+    (!bs, !bs', !bs'') = V.unzip3 $ V.map unpackSummary (summs ^. boxes . byRegion)
+    mk (!r, !c, !b) = def & rows . byRegion .~ r & columns . byRegion .~ c & boxes . byRegion .~ b
 
 -- | helper that just calls `completelySummarize` and unpacks the `SummaryRecord` GADT.
 collectSummaries :: forall f (s :: Type -> Type) a. (SimplifierConstraint f s a) => f -> s a -> CollectedSummaries f a
 collectSummaries f = factorSummary f (Proxy @s) . toSumms
   where
-    toSumms = completelySummarize (gridLens f . cellPos) . curry . foldOf $ summarize f (Proxy @s)
+    toSumms = completelySummarize (gridLens f) . curry . foldOf $ summarize f (Proxy @s)
 
 fullSimplifyStep :: forall f s a. (SimplifierConstraint f s a) => f -> s a -> SimplifierResult s a
 fullSimplifyStep f g
@@ -225,7 +227,7 @@ mkSimplify f = Simplify f fullSimplifyStep
 printUnquoted :: (MonadIO m) => Text -> m ()
 printUnquoted = liftIO . T.putStrLn
 
-type ValueConstraint a = (VU.Unbox (Cell a), VU.Unbox a, Enum a, Ord a, TextShow a)
+type ValueConstraint a = (VU.Unbox (Cell a), VU.IsoUnbox a Word16, VU.Unbox a, Enum a, Ord a, TextShow a)
 
 instance (ValueConstraint a) => Simplifier SimplifyKnowns Grid a where
     type MonoidFor SimplifyKnowns a = Union (CellSet a)

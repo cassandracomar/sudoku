@@ -5,43 +5,34 @@ module Main (main) where
 import Control.Category ((>>>))
 import Control.Lens
 import Control.Monad ((>=>))
-import Data.BitSet qualified as BS
 import Data.Default (Default (def))
-import Data.List (nub, sort)
-import Data.List.NonEmpty qualified as NonEmpty
-import Data.Set qualified as S
-import Data.Vector.Generic.Lens (vectorTraverse)
-import Data.Vector.Unboxed qualified as VU
 import Data.Word (Word16, Word8)
-import Debug.Trace (trace)
 import Paths_sudoku (getDataFileName)
-import Sudoku.Cell (Cell, CellPos, Digit (Nine, One), boxIndex, boxIndexing, boxNumber, mkCell, _CellSet, _Possibly)
+import Sudoku.Cell (Cell, CellPos, Digit (Nine, One), boxIndex, boxIndexing, boxNumber)
 import Sudoku.Grid (
-    CommonPossibilities (CommonPossibilities),
     Grid,
+    RegionIndicator (..),
+    SolverOptions (..),
     boxAt,
     colAt,
-    grid,
-    knownTuples,
     rowAt,
  )
 import Sudoku.Simplifiers (
-    HasSimplifierResult (contradictionsExplained, simplifierOutput),
-    fullSimplifyStep,
-    SimplifyCellTuples (SimplifyCellTuples),
+    HasSimplifierResult (contradictionsExplained),
     SimplifyKnowns (SimplifyKnowns),
+    fullSimplifyStep,
  )
-import Sudoku.Solver (SolverConstraints, parseGrid, runSolver, solverCheckGridSolved)
-import Sudoku.Summaries (RegionIndicator (..))
+import Sudoku.Solver (parseGrid, runSolver, solverCheckGridSolved)
 import Test.Falsify.Generator (Gen, inRange, list)
-import Test.Falsify.Generator qualified as F
-import Test.Falsify.Predicate (satisfies, (.$))
-import Test.Falsify.Property (Property, assert, gen)
 import Test.Falsify.Range (between)
-import Test.Falsify.Range qualified as R
 import Test.Tasty
-import Test.Tasty.Falsify (testProperty)
 import Test.Tasty.HUnit (Assertion, assertBool, testCase)
+
+import Data.BitSet qualified as BS
+import Data.List.NonEmpty qualified as NonEmpty
+import Data.Vector.Unboxed qualified as VU
+import Test.Falsify.Generator qualified as F
+import Test.Falsify.Range qualified as R
 
 main :: IO ()
 main = defaultMain $ testGroup "Sudoku Tests" [fullSolverTests, simplifierTests]
@@ -67,7 +58,7 @@ solverTestCase :: String -> IO (Grid Digit) -> TestTree
 solverTestCase name mg = testCase name $ mg >>= testPuzzleSolver
 
 testPuzzleSolver :: Grid Digit -> Assertion
-testPuzzleSolver = runSolver >=> pure . solverCheckGridSolved >=> assertBool "the solver failed to solve the puzzle"
+testPuzzleSolver = runSolver def >=> pure . solverCheckGridSolved >=> assertBool "the solver failed to solve the puzzle"
 
 checkContradictions :: Grid Digit -> Assertion
 checkContradictions =

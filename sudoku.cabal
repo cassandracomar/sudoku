@@ -71,6 +71,7 @@ library
                     , Sudoku.Tuples
                     , Sudoku.Simplifiers
                     , Data.BitSet
+                    , Data.WordMap
 
     -- LANGUAGE extensions used by modules in this package.
     default-extensions:   OverloadedLabels
@@ -101,6 +102,9 @@ library
                     , monoidal-containers
                     , text
                     , text-show
+                    , accelerate
+                    , accelerate-llvm
+                    , accelerate-llvm-native
 
     -- Directories containing source files.
     hs-source-dirs:   src
@@ -192,6 +196,7 @@ executable sudoku-bench
                     , criterion
                     , optparse-applicative
                     , lens
+                    , data-default
 
     -- Directories containing source files.
     hs-source-dirs:   test

@@ -26,6 +26,7 @@ solverOpts :: Parser SolverOptions
 solverOpts =
     SolverOptions
         <$> strArgument (metavar "FILE" <> help "file path to the givens for the puzzle to solve")
+        <*> pure False -- when running the console app, never treat it as a test case
         <*> switch (short 'v' <> long "verbose" <> help "enable verbose, step by step logging")
 
 main :: IO ()

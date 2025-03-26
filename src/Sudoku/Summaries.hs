@@ -47,17 +47,17 @@ import Data.Vector.Unboxed.Base qualified as MVU
 newtype Union a = Union {runUnion :: a}
     deriving (Eq, Ord)
 
-instance IsoUnbox (Union (CellSet a)) (CellSet a) where
-    fromURepr = Union
-    toURepr = runUnion
+instance IsoUnbox (Union (CellSet a)) Word16 where
+    fromURepr = Union . CellSet . A.BS.BitSet
+    toURepr (Union (CellSet (A.BS.BitSet bs))) = bs
 
 newtype instance VU.MVector s (Union a) = MV_Union (VU.MVector s Word16)
 
 newtype instance VU.Vector (Union a) = V_Union (VU.Vector Word16)
 
-deriving via (Union (CellSet a) `VU.As` CellSet a) instance VG.MVector MVU.MVector (Union (CellSet a))
+deriving via (Union (CellSet a) `VU.As` Word16) instance VG.MVector MVU.MVector (Union (CellSet a))
 
-deriving via (Union (CellSet a) `VU.As` CellSet a) instance VG.Vector VU.Vector (Union (CellSet a))
+deriving via (Union (CellSet a) `VU.As` Word16) instance VG.Vector VU.Vector (Union (CellSet a))
 
 instance VU.Unbox (Union (CellSet a))
 
@@ -65,17 +65,17 @@ makePrisms ''Union
 
 newtype Intersects a = Intersects {runIntersection :: a} deriving (Eq, Ord, VP.Prim)
 
-instance IsoUnbox (Intersects (CellSet a)) (CellSet a) where
-    fromURepr = Intersects
-    toURepr = runIntersection
+instance IsoUnbox (Intersects (CellSet a)) Word16 where
+    fromURepr = Intersects . CellSet . A.BS.BitSet
+    toURepr (Intersects (CellSet (A.BS.BitSet bs))) = bs
 
 newtype instance VU.MVector s (Intersects a) = MV_Intersects (VU.MVector s Word16)
 
 newtype instance VU.Vector (Intersects a) = V_Intersects (VU.Vector Word16)
 
-deriving via (Intersects (CellSet a) `VU.As` CellSet a) instance VG.MVector MVU.MVector (Intersects (CellSet a))
+deriving via (Intersects (CellSet a) `VU.As` Word16) instance VG.MVector MVU.MVector (Intersects (CellSet a))
 
-deriving via (Intersects (CellSet a) `VU.As` CellSet a) instance VG.Vector VU.Vector (Intersects (CellSet a))
+deriving via (Intersects (CellSet a) `VU.As` Word16) instance VG.Vector VU.Vector (Intersects (CellSet a))
 
 makePrisms ''Intersects
 
@@ -182,23 +182,74 @@ riToLens Row = rows
 riToLens Column = columns
 riToLens Box = boxes
 
+newtype SummaryU m = SummaryU (m, m, m, m, m, m, m, m, m)
+
+makePrisms ''SummaryU
+
+instance (Semigroup m) => Semigroup (SummaryU m) where
+    SummaryU (!m1, !m2, !m3, !m4, !m5, !m6, !m7, !m8, !m9) <> SummaryU (!m1', !m2', !m3', !m4', !m5', !m6', !m7', !m8', !m9') =
+        SummaryU (m1 <> m1', m2 <> m2', m3 <> m3', m4 <> m4', m5 <> m5', m6 <> m6', m7 <> m7', m8 <> m8', m9 <> m9')
+    {-# INLINE (<>) #-}
+
+instance (Monoid m) => Monoid (SummaryU m) where
+    mempty = SummaryU (mempty, mempty, mempty, mempty, mempty, mempty, mempty, mempty, mempty)
+    {-# INLINE mempty #-}
+
+type instance IxValue (SummaryU m) = m
+
+type instance Index (SummaryU m) = Int
+
+instance Ixed (SummaryU m) where
+    ix i = _SummaryU . ix (i - 1)
+    {-# INLINE ix #-}
+
+concat9 :: (Monoid m) => SummaryU m -> m
+concat9 (SummaryU (!m1, !m2, !m3, !m4, !m5, !m6, !m7, !m8, !m9)) = m1 <> (m2 <> (m3 <> (m4 <> (m5 <> (m6 <> (m7 <> (m8 <> m9)))))))
+{-# INLINE concat9 #-}
+
+majorMinor :: RegionIndicator -> CellPos -> (Word8, Word8)
+majorMinor Row (r, c, _) = (r, c)
+majorMinor Column (r, c, _) = (c, r)
+majorMinor Box loc@(_, _, b) = (b, boxIndex loc)
+
 {- | assuming the monoid instance for `a` is associative, this function provides an `ifoldl'` function that can be used over an entire
 grid to calculate a summary of the grid, organized by region. rather than using the inefficient `Monoid` instance on `CellSummaries`,
 it instead updates each region the cell belongs to by indexing `CellSummaries` to get the current summary of each region type and
 updates it by `mappend`ing `a` on the right. this relies on the associativity of the `Monoid` instance for `a`. a non-law abiding
 `Monoid` instance won't produce the expected results.
--}
-addToSummary :: (Monoid a) => CellPos -> RegionSummaries a -> a -> RegionSummaries a
-addToSummary (r, c, b) regions a = regions & rows . ixSummary r %~ (<> a) & columns . ixSummary c %~ (<> a) & boxes . ixSummary b %~ (<> a)
-{-# INLINE addToSummary #-}
 
-{- | produce a summary for an entire grid. takes an `IndexedFold` that maps each `Cell` to a Monoidal summary type `a`, carrying an index that
+this function assumes the mappend will be performed via `concat9`, an unrolled concatenation in a single step, and therefore sticks
+each summary into a 9 element tuple for later concatenation. use this function in conjuction with `summaryOf` to get the final,
+concatenated summaries organized by region. of note, there are 9 regions and 9 entries per region, so this function just sets
+the summary for the given `Cell` at its prescribed positions in `RegionSummaries`. there are 3 entries per `Cell`
+(i.e. `Row`, `Column`, `Box`) so we trade increased memory usage for execution speed.
+-}
+addToSummary :: (Monoid m) => CellPos -> RegionSummaries (SummaryU m) -> m -> RegionSummaries (SummaryU m)
+addToSummary loc regions m =
+    regions
+        & addToRegion Row rowMajor rowMinor m
+        & addToRegion Column colMajor colMinor m
+        & addToRegion Box boxMajor boxMinor m
+  where
+    (!rowMajor, !rowMinor) = majorMinor Row loc
+    (!colMajor, !colMinor) = majorMinor Column loc
+    (!boxMajor, !boxMinor) = majorMinor Box loc
+    addToRegion !ri !major !minor !m' = riToLens ri . ixSummary major . ix (fromIntegral minor) .~ m'
+
+{- | produce a summary for an entire grid. takes the `Grid` vector and a function that maps each `Cell` to a Monoidal summary type `a`, carrying an index that
 provides the necessary information about the `Cell`'s row/column/box. the summary type chosen determines the information available at the end of the fold.
 for example, mapping each `Cell` to a singleton `CellSet` of `Known` digits wrapped in a `Union` newtype will produce the set of already known digits
 in each row/column/box.
+
+this function unrolls the inner most loop by concatenating the 9 summaries for each region (i.e. row 1) in a single step. this does mean that
+each summary is independently allocated before then concatenating all `CellSummaries` at once.
 -}
-summaryOf :: (Monoid a) => IndexedFold CellPos s a -> s -> RegionSummaries a
-summaryOf l = ifoldlOf' l addToSummary (RegionSummaries mempty mempty mempty)
+summaryOf :: (Monoid m, VU.Unbox s) => VU.Vector s -> (CellPos -> s -> m) -> RegionSummaries m
+summaryOf v f = RegionSummaries (sConcat rowU) (sConcat colU) (sConcat boxU)
+  where
+    add !r !i = addToSummary (rowColumn i) r . f (rowColumn i)
+    RegionSummaries !rowU !colU !boxU = VU.ifoldl' add (RegionSummaries mempty mempty mempty) v
+    sConcat (CellSummaries !cs) = CellSummaries (V.map concat9 cs)
 {-# INLINE summaryOf #-}
 
 applySummaryOf ::
@@ -261,19 +312,19 @@ applyUpdateFromKnowns :: Cell a -> Union (CellSet a) -> Cell a
 applyUpdateFromKnowns cell (Union (CellSet cs)) = cell & _Possibly . _CellSet %~ (A.BS.\\ cs)
 
 simplifyNakedSingles ::
-    (VU.Unbox (Cell a), Enum a) => Lens' s (VU.Vector (Cell a)) -> RegionSummaries b -> s -> s
+    (VU.Unbox (Cell a), Enum a, VU.IsoUnbox a Word16) => Lens' s (VU.Vector (Cell a)) -> RegionSummaries b -> s -> s
 simplifyNakedSingles = applySummary updateFromNakedSingles
 {-# INLINE simplifyNakedSingles #-}
 
 updateFromNakedSingles ::
-    (VU.Unbox (Cell a), Enum a) => RegionSummaries b -> CellPos -> Cell a -> Cell a
+    (VU.Unbox (Cell a), Enum a, VU.IsoUnbox a Word16) => RegionSummaries b -> CellPos -> Cell a -> Cell a
 updateFromNakedSingles _ _ (Possibly (CellSet cs)) | A.BS.size cs == 1 = mkKnown $ fromJust (A.BS.first cs)
 updateFromNakedSingles _ _ cell = cell
 
 nakedSinglesUpdateSet :: CellPos -> RegionSummaries b -> Maybe ()
 nakedSinglesUpdateSet _ _ = Just ()
 
-applyUpdateFromNakedSingles :: (Enum a, VU.Unbox (Cell a)) => Cell a -> () -> Cell a
+applyUpdateFromNakedSingles :: (Enum a, VU.Unbox (Cell a), VU.IsoUnbox a Word16) => Cell a -> () -> Cell a
 applyUpdateFromNakedSingles (Possibly (CellSet cs)) _ | A.BS.size cs == 1 = mkKnown $ fromJust (A.BS.first cs)
 applyUpdateFromNakedSingles cell _ = cell
 
@@ -306,7 +357,7 @@ this function assumes the `RegionSummaries` has already been filtered such that 
 only take a single position.
 -}
 simplifyHiddenSingles ::
-    (VU.Unbox (Cell a), Enum a, Ord a) =>
+    (VU.Unbox (Cell a), VU.IsoUnbox a Word16, Enum a, Ord a) =>
     Lens' s (VU.Vector (Cell a)) -> RegionSummaries (M.MonoidalMap a (Sum Int)) -> s -> s
 simplifyHiddenSingles = applySummary mkUpdate
   where
@@ -321,13 +372,14 @@ hiddenSinglesUpdateSet ::
     (VU.Unbox (Cell a), Enum a) => CellPos -> RegionSummaries (M.MonoidalMap a (Sum Int)) -> Maybe (CellSet a)
 hiddenSinglesUpdateSet (r, c, b) summs = Just . CellSet $ foldMap (uncurry (findInSummary summs)) [(Row, r), (Column, c), (Box, b)]
 
-applyUpdatesFromHiddenSingles :: (VU.Unbox (Cell a), Enum a) => CellSet a -> Cell a -> Cell a
+applyUpdatesFromHiddenSingles :: (VU.Unbox (Cell a), Enum a, VU.IsoUnbox a Word16) => CellSet a -> Cell a -> Cell a
 applyUpdatesFromHiddenSingles cs = possiblyOf cs %~ view (singular _Just . re _Known) . findValue cs
   where
     findValue (CellSet ds) = findOf (_Possibly . _CellSet . bsfolded) (`A.BS.member` ds)
 
 updateFromHiddenSingles ::
-    (Enum a, VU.Unbox (Cell a)) => RegionSummaries (M.MonoidalMap a (Sum Int)) -> CellPos -> Cell a -> Cell a
+    (Enum a, VU.Unbox (Cell a), VU.IsoUnbox a Word16) =>
+    RegionSummaries (M.MonoidalMap a (Sum Int)) -> CellPos -> Cell a -> Cell a
 updateFromHiddenSingles summs loc = upd (findUpdates summs loc)
   where
     upd ds = possiblyOf ds %~ view (singular _Just . re _Known) . findValue ds
@@ -342,7 +394,7 @@ explainHiddenSingles ri i summ
 {-# INLINE explainHiddenSingles #-}
 
 -- | a `Fold` that tabulates the values already `Known` across the `Cell`'s row/column/box
-knowns :: (Enum a) => Fold (Cell a) (Union (CellSet a))
+knowns :: (Enum a, VU.IsoUnbox a Word16) => Fold (Cell a) (Union (CellSet a))
 knowns = _Known . to A.BS.singleton . from (_Union . _CellSet)
 {-# INLINE knowns #-}
 
@@ -354,7 +406,7 @@ countedPoss = _Possibly . _CellSet . to A.BS.toList . to (M.fromList . fmap (,Su
 {- | a `Fold` producing a map for each `Cell` that tracks how many times a value has been marked as Known, across it's Row/Column/Box
 this should never exceed 1!
 -}
-countedKnowns :: (Enum a, Ord a) => Fold (Cell a) (M.MonoidalMap a (Sum Int))
+countedKnowns :: (Enum a, Ord a, VU.IsoUnbox a Word16) => Fold (Cell a) (M.MonoidalMap a (Sum Int))
 countedKnowns = _Known . to (M.fromList . pure . (,Sum 1))
 {-# INLINE countedKnowns #-}
 
@@ -409,7 +461,7 @@ infixr 9 |.|
 
 data SummaryRecord m a where
     SummaryRecord ::
-        (Monoid m) => !(Contradictions a) -> !(Union (CellSet a)) -> !m -> SummaryRecord m a
+        (Monoid m) => {-# UNPACK #-} !(Contradictions a) -> {-# UNPACK #-} !(Union (CellSet a)) -> !m -> SummaryRecord m a
 
 instance (Ord a, Enum a) => Semigroup (SummaryRecord m a) where
     (SummaryRecord contra solvedSumms step) <> (SummaryRecord contra' solvedSumms' step') = SummaryRecord (contra <> contra') (solvedSumms <> solvedSumms') (step <> step')
@@ -417,7 +469,7 @@ instance (Ord a, Enum a) => Semigroup (SummaryRecord m a) where
 instance (Ord a, Enum a, Monoid m) => Monoid (SummaryRecord m a) where
     mempty = SummaryRecord mempty mempty mempty
 
-noPossibilities :: (Enum a) => IndexedFold CellPos (CellPos, Cell a) [CellPos]
+noPossibilities :: (Enum a, VU.IsoUnbox a Word16) => IndexedFold CellPos (CellPos, Cell a) [CellPos]
 noPossibilities = ifolding @Maybe (\(loc, cell) -> (loc, [loc]) <$ ensure cond cell)
   where
     cond c = hasn't (_Possibly . _CellSet . to A.BS.toList . folded) c && hasn't _Known c
@@ -430,13 +482,13 @@ possibilitiesWithLoc = ifolding (\(loc, cell) -> Identity (loc, posses loc cell)
     posses loc = foldlOf' (_Possibly . _CellSet . bsfolded) (ins loc) mempty
 {-# INLINE possibilitiesWithLoc #-}
 
-contradictions :: (Enum a, Ord a) => IndexedFold CellPos (CellPos, Cell a) (Contradictions a)
+contradictions :: (Enum a, Ord a, VU.IsoUnbox a Word16) => IndexedFold CellPos (CellPos, Cell a) (Contradictions a)
 contradictions = (noPossibilities <|.|> possibilitiesWithLoc <.| countedKnowns) . to mkContra
   where
     mkContra (el, (cp, ck)) = Contradictions el cp ck
 {-# INLINE contradictions #-}
 
-toContradictions :: (Enum a, Ord a) => CellPos -> Cell a -> Contradictions a
+toContradictions :: (Enum a, Ord a, VU.IsoUnbox a Word16) => CellPos -> Cell a -> Contradictions a
 toContradictions loc cell = Contradictions noPossF posses countedKnownsF
   where
     noPossP c = hasn't (_Possibly . _CellSet . to A.BS.toList . folded) c && hasn't _Known c
@@ -446,10 +498,9 @@ toContradictions loc cell = Contradictions noPossF posses countedKnownsF
     countedKnownsF = foldOf countedKnowns cell
 
 summary ::
-    (Enum a, Ord a, Monoid m) => (CellPos -> Cell a -> m) -> IndexedFold CellPos (CellPos, Cell a) (SummaryRecord m a)
-summary f =
-    ifolding @Identity
-        (\(loc, cell) -> pure (loc, SummaryRecord (toContradictions loc cell) (foldOf knowns cell) (f loc cell)))
+    (Enum a, Ord a, Monoid m, VU.IsoUnbox a Word16) =>
+    (CellPos -> Cell a -> m) -> CellPos -> Cell a -> SummaryRecord m a
+summary f loc cell = SummaryRecord (toContradictions loc cell) (cell ^. knowns) (f loc cell)
 {-# INLINE summary #-}
 
 factor :: (Monoid m, Monoid m') => RegionSummaries (m, m') -> (RegionSummaries m, RegionSummaries m')
@@ -461,17 +512,17 @@ factor summs = (mk (rs, cs, bs), mk (rs', cs', bs'))
     mk (r, c, b) = def & rows . byRegion .~ r & columns . byRegion .~ c & boxes . byRegion .~ b
 {-# INLINE factor #-}
 
--- | get a summary for a `Simplifier` along with a summary to check for contradictions
+{- | get a summary for a `Simplifier` along with a summary to check for contradictions
 summarizeWithContradictions ::
-    (Monoid m, Enum a, Ord a) =>
+    (Monoid m, Enum a, Ord a, VU.IsoUnbox a Word16) =>
     IndexedTraversal' CellPos s (Cell a)
     -> Fold (CellPos, Cell a) m
     -> s
     -> (RegionSummaries (Contradictions a), RegionSummaries m)
 summarizeWithContradictions l m = factor . summaryOf (l . withIndex . contradictions <|.|> m)
-{-# INLINE summarizeWithContradictions #-}
-
-solved :: (Enum a) => Fold (Cell a) (Union (CellSet a))
+{\-# INLINE summarizeWithContradictions #-\}
+-}
+solved :: (Enum a, VU.IsoUnbox a Word16) => Fold (Cell a) (Union (CellSet a))
 solved = knowns
 {-# INLINE solved #-}
 
@@ -482,13 +533,22 @@ checkSolved summs = checkAcross Row && checkAcross Column && checkAcross Box
     checkAcross ri = allOf (riToLens ri . byRegion . traversed . _Union . _CellSet) (== completeSet) summs
 {-# INLINE checkSolved #-}
 
+-- completelySummarize ::
+--     (Monoid m, Enum a, Ord a, VU.IsoUnbox a Word16) =>
+--     IndexedTraversal' CellPos s (Cell a)
+--     -> (CellPos -> Cell a -> m)
+--     -> s
+--     -> RegionSummaries (SummaryRecord m a)
+-- completelySummarize l f = summaryOf (l . withIndex . summary f)
+-- {-# INLINE completelySummarize #-}
+
 completelySummarize ::
-    (Monoid m, Enum a, Ord a) =>
-    IndexedTraversal' CellPos s (Cell a)
+    (Monoid m, Enum a, Ord a, VU.IsoUnbox a Word16) =>
+    Lens' s (VU.Vector (Cell a))
     -> (CellPos -> Cell a -> m)
     -> s
     -> RegionSummaries (SummaryRecord m a)
-completelySummarize l f = summaryOf (l . withIndex . summary f)
+completelySummarize l f s = summaryOf (s ^. l) (summary f)
 {-# INLINE completelySummarize #-}
 
 findDigitRepeatsOn :: (TextShow a) => RegionIndicator -> Int -> a -> Sum Int -> [Text]

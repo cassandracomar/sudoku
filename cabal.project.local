@@ -1,4 +1,3 @@
-packages: sudoku.cabal
 multi-repl: True
 ignore-project: False
 profiling-detail: late-toplevel
@@ -10,6 +9,7 @@ library-profiling: False
 profiling: False
 program-options
     ghc-options:
+                 -fllvm
                  -funbox-strict-fields
                  -- inline aggressively to ensure lenses/polymorphic functions are fully saturated at concrete types
                  -- we're about 50% slower on the hot path when -fexpose-all-unfoldings, -fspecialise-aggressively,
@@ -46,6 +46,7 @@ program-options
                  -dsuppress-module-prefixes
                  -dsuppress-type-applications
                  -dsuppress-timestamps
+                 -ddump-asm
                  -- -fforce-recomp
                  -- -Wall-missed-specializations
                  -- -fprof-late

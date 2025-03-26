@@ -21,6 +21,7 @@ import Data.Text.Lazy.Builder (fromLazyText)
 import Data.Vector.Generic.Lens (ordinals)
 import Data.Word (Word8)
 import GHC.Generics (Generic)
+import GHC.Word (Word16)
 import Sudoku.Cell
 import TextShow (Builder, TextShow (showb), toLazyText, toString, unlinesB)
 import TextShow.Data.Char (showbLitChar)
@@ -43,12 +44,18 @@ guarded cond act = (cond >>= guard) *> act <|> pure ()
 
 type SolverMonad m = (MonadIO m, Alternative m, MonadReader SolverOptions m)
 
-data SolverOptions = SolverOptions {_fp :: FilePath, _verbose :: Bool}
+data SolverOptions = SolverOptions {_fp :: FilePath, _testNoLog :: Bool, _verbose :: Bool}
+
+instance Default SolverOptions where
+    def = SolverOptions{_fp = "", _testNoLog = True, _verbose = False}
 
 makeLenses ''SolverOptions
 
+-- | the name lies slightly -- when running an automated test, we don't want any logging.
+-- so silence logging in that case but otherwise output the log message, whether verbose logging
+-- is enabled or not.
 printUnchecked :: (SolverMonad m) => Text -> m ()
-printUnchecked = liftIO . T.putStrLn
+printUnchecked = guarded (view testNoLog <&> not) . (liftIO . T.putStrLn)
 
 checkVerbosity :: (SolverMonad m) => m Bool
 checkVerbosity = view verbose
@@ -285,7 +292,7 @@ boxIndicator _ = ""
 addBoxes :: RegionIndicator -> [Builder] -> [Builder]
 addBoxes ri = L.intercalate [boxIndicator ri] . chunksOf 6
 
-showRow :: (TextShow a, Enum a) => Grid a -> Word8 -> Builder
+showRow :: (TextShow a, Enum a, VU.IsoUnbox a Word16) => Grid a -> Word8 -> Builder
 showRow g i = fold $ "|" : (addBoxes Column displayRow <> ["|"])
   where
     displayRow = intersperse "|" (g ^.. runIndexedTraversal (rowAt i) . to showb)
@@ -296,10 +303,10 @@ underlineRow = fold $ replicate (9 * 12 + 3) (showbLitChar '_')
 dashRow :: Builder
 dashRow = fold $ replicate (9 * 12 + 3) "-"
 
-showRows :: (TextShow a, Enum a) => Grid a -> [Builder]
+showRows :: (TextShow a, Enum a, VU.IsoUnbox a Word16) => Grid a -> [Builder]
 showRows g = dashRow : addBoxes Row (intersperse underlineRow ([1 .. 9] <&> showRow g)) <> [dashRow]
 
-instance (TextShow a, Enum a) => TextShow (Grid a) where
+instance (TextShow a, Enum a, VU.IsoUnbox a Word16) => TextShow (Grid a) where
     showb g = unlinesB $ showRows g <> ("" : kts)
       where
         kts = case lengthOf (knownTuples . folded) g > 0 of
@@ -307,7 +314,7 @@ instance (TextShow a, Enum a) => TextShow (Grid a) where
             False -> []
     {-# SPECIALIZE showb :: Grid Digit -> Builder #-}
 
-instance (TextShow a, Enum a) => Show (Grid a) where
+instance (TextShow a, Enum a, VU.IsoUnbox a Word16) => Show (Grid a) where
     show = toString . showb
 
 type SudokuSetTraversal a = ReifiedIndexedTraversal' CellPos (Grid a) (Cell a)

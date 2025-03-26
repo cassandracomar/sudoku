@@ -3,6 +3,7 @@
     nixpkgs.url = "github:nixos/nixpkgs";
     flake-parts.url = "github:hercules-ci/flake-parts";
     haskell-flake.url = "github:srid/haskell-flake";
+    llvm-hs.url = "github:cassandracomar/llvm-hs/llvm-16";
   };
 
   outputs = inputs: let
@@ -18,17 +19,65 @@
         config,
         pkgs,
         ...
-      }: {
+      }: let
+        haskellLibUncomposable = import "${inputs.nixpkgs}/pkgs/development/haskell-modules/lib" {
+          inherit (pkgs) lib;
+          inherit pkgs;
+        };
+        callPackage = pkgs.newScope {
+          haskellLib = haskellLibUncomposable.compose;
+          overrides = pkgs.haskell.packageOverrides;
+          stdenv = pkgs.llvmPackages_16.libcxxStdenv;
+        };
+        ghc =
+          (callPackage "${inputs.nixpkgs}/pkgs/development/compilers/ghc/9.10.1.nix" {
+            bootPkgs = pkgs.pkgsBuildBuild.haskell.packages.ghc963Binary;
+            buildTargetLlvmPackages = pkgs.llvmPackages_16;
+            llvmPackages = pkgs.llvmPackages_16;
+            useLLVM = false;
+            inherit (pkgs.pkgsBuildBuild.darwin) autoSignDarwinBinariesHook xattr;
+          })
+          .overrideAttrs (old: let
+            targetPlatform = pkgs.llvmPackages_16.libcxxStdenv.targetPlatform.config;
+            hadrianFlags = ["*.*.ghc.*.opts += -optc--target=${targetPlatform} -optcxx--target=${targetPlatform}" "*.*.cc.c.opts += --target=${targetPlatform}"];
+          in {
+            configurePlatforms = ["build" "host" "target"];
+            configureFlags = (old.configureFlags or []) ++ ["--target=${targetPlatform}" "LlvmTarget=${targetPlatform}" "bootstrap_llvm_target=${targetPlatform}"];
+            preConfigure =
+              (old.preConfigure or "")
+              + ''
+                hadrianFlagsArray+=(${pkgs.lib.escapeShellArgs hadrianFlags})
+                sed -i 's/arm64-apple-darwin/aarch64-apple-darwin/' llvm-targets
+                sed -i 's/LlvmMaxVersion=16/LlvmMaxVersion=17/' configure
+              '';
+          });
+        haskellPackages = callPackage "${inputs.nixpkgs}/pkgs/development/haskell-modules" {
+          inherit ghc;
+          buildHaskellPackages = haskellPackages;
+          compilerConfig = callPackage "${inputs.nixpkgs}/pkgs/development/haskell-modules/configuration-ghc-9.10.x.nix" {};
+        };
+      in {
+        _module.args.pkgs = import inputs.nixpkgs {
+          inherit system;
+          config.replaceStdenv = {pkgs, ...}: pkgs.llvmPackages_16.libcxxStdenv;
+          overlays = [
+            (final: prev: {
+              inherit haskellPackages;
+              pythonPackages = prev.pythonPackages.overrides (final': prev': {
+                sphinx = prev.sphinx.override {
+                  doCheck = false;
+                };
+              });
+            })
+          ];
+        };
         haskellProjects.ghc910 = {
           defaults.packages = {}; # Disable scanning for local package
           devShell.enable = false; # Disable devShells
           autoWire = []; # Don't wire any flake outputs
 
           basePackages =
-            pkgs
-            .haskell
-            .packages
-            .ghc910
+            haskellPackages
             .extend (final: prev: {
               # Diff = pkgs.haskell.packages.ghc910.Diff_1_0_2;
               # Diff_0_5_0 = prev.Diff;
@@ -43,6 +92,30 @@
               rev = "3ab746dce03f618a6b584c97fbc2a7a9dc03af72";
               sha256 = "sha256-6WXA2e/K4cFqIc71kz4Gij6BqkaNCR9qWV2JTexvXWk=";
             };
+            accelerate-llvm = pkgs.applyPatches {
+              name = "accelerate-llvm-src";
+              src = pkgs.fetchFromGitHub {
+                owner = "acceleratehs";
+                repo = "accelerate-llvm";
+                rev = "eb544e52e66509314c5efe9f9765c5e42d00c5a4";
+                sha256 = "sha256-EXMfVFFUGAlwo3+E5krJIid8lMb5B2bGD0zRi+Jq9u4=";
+              };
+              patches = [./accelerate-llvm-fix.patch];
+            };
+            accelerate = pkgs.applyPatches {
+              name = "accelerate-src";
+              src = pkgs.fetchFromGitHub {
+                owner = "acceleratehs";
+                repo = "accelerate";
+                rev = "237303a660a41f04e43b1661c3fa31528be7927b";
+                sha256 = "sha256-B91EucR+RujhJFEjM0794/0ecPJFDPiUbE1DsXCaHxE=";
+              };
+              patches = [./accelerate-fix.patch];
+            };
+            accelerate-llvm-native = pkgs.runCommand "prep-accelerate-llvm-source" {} ''
+              mkdir -p $out
+              cp -rL ${accelerate-llvm}/accelerate-llvm-native/ $out
+            '';
           in {
             Diff.source = "1.0.2";
             fourmolu.source = pkgs.fetchFromGitHub {
@@ -88,6 +161,11 @@
               rev = "870357e77d3ae3f65f8054860cd8e6ccbfc5f04e";
               sha256 = "sha256-RyjEdOJeFtmaOao5Kqa+G2laNCo55CongJqEUDXcvQM=";
             };
+            accelerate.source = accelerate;
+            accelerate-llvm.source = "${accelerate-llvm}/accelerate-llvm";
+            accelerate-llvm-native.source = "${accelerate-llvm-native}/accelerate-llvm-native";
+            llvm-hs.source = "${inputs.llvm-hs}/llvm-hs";
+            llvm-hs-pure.source = "${inputs.llvm-hs}/llvm-hs-pure";
           };
 
           settings = {
@@ -126,50 +204,97 @@
                 semanticTokens = true;
                 stan = false;
               };
-              extraTestToolDepends = with pkgs; [git self.cabal-fmt];
+              extraTestToolDepends = with pkgs; [git self.cabal-fmt self.cabal-install];
               extraBuildDepends = with self; [hlint apply-refact ghc-lib-parser-ex refact cabal-add];
               extraSetupDepends = [pkgs.pkg-config];
               sharedExecutables = false;
               custom = drv:
-                drv.overrideAttrs (old: {
-                  HOME = "."; # fix tests trying to create paths under $HOME
-
+                pkgs.haskell.lib.compose.overrideCabal (old: {
                   postInstall =
-                    old.postInstall
-                    or ""
+                    (old.postInstall or "")
                     + ''
-                      set -x
                       find $out/lib/ghc-9.10.1/lib/aarch64-osx-ghc-9.10.1-inplace -name "*.dylib" -exec ln -sf {} $out/lib/links/ \;
-                      set +x
                     '';
-                });
-              check = false;
+                })
+                drv;
               patches = [
                 ./hls-enable-hlint.patch
               ];
               jailbreak = true;
+              check = false;
+            };
+            accelerate = {self, ...}: {
+              cabalFlags = {
+                nofib = true;
+              };
+              extraBuildDepends = with self; [tasty-expected-failure tasty-hedgehog tasty-hunit tasty-rerun];
+            };
+            accelerate-llvm = {
+              extraPkgconfigDepends = [pkgs.zlib];
+              extraBuildTools = with pkgs.llvmPackages_16; [libllvm];
+            };
+            accelerate-llvm-native = {
+              extraPkgconfigDepends = with pkgs.llvmPackages_16; [pkgs.zlib libcxx];
+              extraBuildTools = with pkgs.llvmPackages_16; [libllvm bintools pkgs.which];
+              custom = drv:
+                drv.overrideAttrs (old: {
+                  preCheck = ''
+                    export HOME=$(pwd)
+                    export LD=clang
+                  '';
+                });
+            };
+            llvm-hs = {self, ...}: {
+              extraBuildTools = with pkgs.llvmPackages_16; [self.hsc2hs libllvm.dev];
+              extraPkgconfigDepends = with pkgs; [zlib xml2];
+              extraLibraries = with pkgs.llvmPackages_16; [libllvm.lib];
+              extraConfigureFlags = with pkgs.llvmPackages_16; [
+                "--ghc-option=-pgmotool=${libllvm}/bin/llvm-otool"
+                "--ghc-option=-pgminstall_name_tool=${libllvm}/bin/llvm-install-name-tool"
+              ];
             };
           };
         };
-        haskellProjects.default = let
-        in {
+        haskellProjects.default = {
           basePackages = config.haskellProjects.ghc910.outputs.finalPackages;
           projectRoot = ./.;
 
           settings = {
             text-show.extraConfigureFlags = ["--ghc-options=-fexpose-all-unfoldings"];
+            containers-accelerate = {
+              custom = drv:
+                drv.overrideAttrs (old: {
+                  preCheck = ''
+                    export HOME=.
+                    export LD=clang
+                  '';
+                });
+            };
+            lens-accelerate.jailbreak = true;
+            sudoku = {
+              extraBuildTools = with pkgs.llvmPackages_16; [libllvm.dev];
+              extraLibraries = with pkgs.llvmPackages_16; [libllvm.lib];
+            };
           };
 
           devShell = {
             hlsCheck.enable = pkgs.stdenv.isDarwin;
             hoogle = true;
             tools = hs: {
-              inherit (hs) cabal-install fourmolu hlint stan;
+              inherit (hs) cabal-install fourmolu hlint;
+            };
+            mkShellArgs = {
+              packages = with pkgs.llvmPackages_16; [libllvm libllvm.dev libllvm.lib];
             };
           };
         };
 
-        packages.default = self.packages.smonad;
+        packages.ghc910 = ghc;
+        packages.llvm-hs = config.haskellProjects.ghc910.outputs.finalPackages.llvm-hs;
+        packages.stdenv = pkgs.stdenv;
+        packages.libllvm = pkgs.llvmPackages_16.libllvm;
+
+        packages.default = self.packages.sudoku;
         formatter = inputs.nixpkgs.legacyPackages.${system}.alejandra;
       };
     };

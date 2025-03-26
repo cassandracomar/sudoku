@@ -16,7 +16,7 @@ import Data.Maybe (fromMaybe)
 import Data.Text.Lazy (Text)
 import Data.Word (Word16)
 import Sudoku.Backtracking (Contradicted, Sudoku, attemptToContradict, findRestrictedCells, ixCell)
-import Sudoku.Cell (Cell, CellPos, Digit, cellPos, showLocB, _CellSet, _Possibly)
+import Sudoku.Cell (Cell, CellPos, Digit, showLocB, _CellSet, _Possibly)
 import Sudoku.Grid
 import Sudoku.Simplifiers
 import Sudoku.Summaries (checkSolved, solved, summaryOf)
@@ -50,7 +50,7 @@ runSimplifierOnce f g =
     g' = res ^. simplifierOutput
 
 solverCheckGridSolved :: Grid Digit -> Bool
-solverCheckGridSolved = checkSolved . summaryOf (grid . cellPos <. solved)
+solverCheckGridSolved g = checkSolved . summaryOf (g ^. grid) . curry $ foldOf (_2 . solved)
 
 runSimplifier :: forall m. (SolverMonad m) => Simplify Grid Digit -> m (Grid Digit) -> m (Grid Digit)
 runSimplifier f = fix $ \rec mg -> do

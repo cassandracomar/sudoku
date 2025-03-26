@@ -16,16 +16,15 @@ module Sudoku.Cell where
 import Control.DeepSeq (NFData)
 import Control.Lens
 import Data.Aeson (FromJSON, ToJSON)
-import Data.Bits (Bits)
+import Data.Bits (Bits ((.|.)), testBit, (!<<.), (!>>.))
 import Data.Data (Typeable)
 import Data.Foldable (fold)
 import Data.List (intersperse)
 import Data.Primitive (Prim (..))
 import Data.Proxy (Proxy (..))
 import Data.Vector.Generic.Lens (vectorTraverse)
-import Data.Vector.Unboxed (IsoUnbox (fromURepr, toURepr))
+import Data.Vector.Unboxed (IsoUnbox (..))
 import Data.Word (Word16, Word8)
-import Foreign.C (CBool)
 import GHC.Generics (Generic)
 import GHC.Word (Word16 (..))
 import TextShow (Builder, TextShow (..), toString)
@@ -79,6 +78,10 @@ instance VP.Prim Digit where
     readOffAddr# a i s = let !(# s', r #) = readOffAddr# a i s in (# s', word16ToDigit r #)
     writeOffAddr# a i d = writeOffAddr# a i (digitToWord16 d)
 
+instance VU.IsoUnbox Digit Word16 where
+    toURepr = digitToWord16
+    fromURepr = word16ToDigit
+
 instance NFData Digit
 
 instance ToJSON Digit
@@ -110,16 +113,6 @@ newtype CellSet a = CellSet {_bitSet :: A.BS.BitSet Word16 a}
     deriving (Typeable, Semigroup, Monoid) via A.BS.BitSet Word16 a
     deriving (Ord, Eq, VP.Prim) via Word16
 
-newtype instance VU.MVector s (CellSet a) = MV_CellSet (VP.MVector s Word16)
-
-newtype instance VU.Vector (CellSet a) = V_CellSet (VP.Vector Word16)
-
-deriving via (VU.UnboxViaPrim Word16) instance VG.MVector MVU.MVector (CellSet a)
-
-deriving via (VU.UnboxViaPrim Word16) instance VG.Vector VU.Vector (CellSet a)
-
-instance VU.Unbox (CellSet a)
-
 instance (NFData a) => NFData (CellSet a)
 
 instance (Enum a, TextShow a) => TextShow (CellSet a) where
@@ -139,40 +132,6 @@ instance (Enum a, TextShow a) => TextShow (CellSet a) where
 instance (Enum a, TextShow a) => Show (CellSet a) where
     show = toString . showb
 
-newtype CellTag a = IsKnown CBool
-    deriving (VP.Prim, Typeable, Generic, Ord, Eq)
-
-instance NFData (CellTag a)
-
-newtype instance VU.MVector s (CellTag a) = MV_CellTag (VP.MVector s (CellTag a))
-
-newtype instance VU.Vector (CellTag a) = V_CellTag (VP.Vector (CellTag a))
-
-deriving via (VU.UnboxViaPrim (CellTag a)) instance VG.MVector MVU.MVector (CellTag a)
-
-deriving via (VU.UnboxViaPrim (CellTag a)) instance VG.Vector VU.Vector (CellTag a)
-
-instance VU.Unbox (CellTag a)
-
-newtype CellRepr a = CellRepr (CellTag a, Word16)
-    deriving (Typeable, Generic, Ord, Eq)
-
-instance NFData (CellRepr a)
-
-instance VU.IsoUnbox (CellRepr a) (CellTag a, Word16) where
-    toURepr (CellRepr cr) = cr
-    fromURepr = CellRepr
-
-newtype instance VU.MVector s (CellRepr a) = MV_CellRepr (VU.MVector s (CellTag a, Word16))
-
-newtype instance VU.Vector (CellRepr a) = V_CellRepr (VU.Vector (CellTag a, Word16))
-
-deriving via (CellRepr a `VU.As` (CellTag a, Word16)) instance VG.MVector MVU.MVector (CellRepr a)
-
-deriving via (CellRepr a `VU.As` (CellTag a, Word16)) instance VG.Vector VU.Vector (CellRepr a)
-
-instance VU.Unbox (CellRepr a)
-
 data Cell a
     = KnownRepr {-# UNPACK #-} !Word16
     | Possibly {-# UNPACK #-} !(CellSet a)
@@ -180,27 +139,41 @@ data Cell a
 
 instance (NFData a) => NFData (Cell a)
 
-instance VU.IsoUnbox (Cell a) (CellRepr a) where
-    toURepr (KnownRepr b) = CellRepr (IsKnown 0, b)
-    toURepr (Possibly (CellSet (A.BS.BitSet cs))) = CellRepr (IsKnown 1, cs)
-    fromURepr (CellRepr (IsKnown 0, b)) = KnownRepr b
-    fromURepr (CellRepr (IsKnown _, b)) = Possibly . CellSet . A.BS.BitSet $ b
+cellToWord16 :: Cell a -> Word16
+cellToWord16 (KnownRepr w) = (w !<<. 1) .|. 0b1
+cellToWord16 (Possibly (CellSet (A.BS.BitSet w))) = w !<<. 1
 
-newtype instance VU.MVector s (Cell a) = MV_Cell (VU.MVector s (CellRepr a))
+word16ToCell :: Word16 -> Cell a
+word16ToCell w
+    | testBit w 0 = KnownRepr (w !>>. 1)
+    | otherwise = Possibly (CellSet (A.BS.BitSet (w !>>. 1)))
 
-newtype instance VU.Vector (Cell a) = V_Cell (VU.Vector (CellRepr a))
+instance VP.Prim (Cell a) where
+    sizeOfType# _ = sizeOfType# (Proxy @Word16)
+    alignmentOfType# _ = alignmentOfType# (Proxy @Word16)
+    indexByteArray# bs i = word16ToCell (indexByteArray# @Word16 bs i)
+    readByteArray# bs i s = let !(# s', r #) = readByteArray# bs i s in (# s', word16ToCell r #)
+    writeByteArray# bs i d = writeByteArray# bs i (cellToWord16 d)
+    setByteArray# bs o l d = setByteArray# bs o l (cellToWord16 d)
+    indexOffAddr# a i = word16ToCell (indexOffAddr# a i)
+    readOffAddr# a i s = let !(# s', r #) = readOffAddr# a i s in (# s', word16ToCell r #)
+    writeOffAddr# a i d = writeOffAddr# a i (cellToWord16 d)
 
-deriving via (Cell a `VU.As` CellRepr a) instance VG.MVector MVU.MVector (Cell a)
+newtype instance VU.MVector s (Cell a) = MV_Cell (VP.MVector s (Cell a))
 
-deriving via (Cell a `VU.As` CellRepr a) instance VG.Vector VU.Vector (Cell a)
+newtype instance VU.Vector (Cell a) = V_Cell (VP.Vector (Cell a))
+
+deriving via (VU.UnboxViaPrim (Cell a)) instance VG.MVector MVU.MVector (Cell a)
+
+deriving via (VU.UnboxViaPrim (Cell a)) instance VG.Vector VU.Vector (Cell a)
 
 instance VU.Unbox (Cell a)
 
-instance (TextShow a, Enum a) => TextShow (Cell a) where
+instance (TextShow a, Enum a, VU.IsoUnbox a Word16) => TextShow (Cell a) where
     showb (Possibly cs) = showb cs
-    showb (KnownRepr d) = "     " <> (showb @a (toEnum @a (fromIntegral d)) <> "     ")
+    showb (KnownRepr d) = "     " <> (showb @a (fromURepr d) <> "     ")
 
-instance (TextShow a, Enum a) => Show (Cell a) where
+instance (TextShow a, Enum a, VU.IsoUnbox a Word16) => Show (Cell a) where
     show = toString . showb
 
 type CellPos = (Word8, Word8, Word8)
@@ -208,8 +181,8 @@ type CellPos = (Word8, Word8, Word8)
 mkCell :: (Enum a) => Cell a
 mkCell = Possibly (CellSet (A.BS.fromList [toEnum 0 ..]))
 
-mkKnown :: (Enum a) => a -> Cell a
-mkKnown = KnownRepr . fromIntegral . fromEnum
+mkKnown :: (VU.IsoUnbox a Word16) => a -> Cell a
+mkKnown = KnownRepr . toURepr
 
 boxNumber :: Word8 -> Word8 -> Word8
 boxNumber r c = fromIntegral $ (r - 1) `div` 3 * 3 + (c - 1) `div` 3 + 1
@@ -247,15 +220,17 @@ boxIndexing =
 makeLenses ''CellSet
 makePrisms ''CellSet
 makeLenses ''A.BS.BitSet
+makePrisms ''A.BS.BitSet
 
-_Known :: forall a. (Enum a) => Prism' (Cell a) a
+_Known :: forall a. (IsoUnbox a Word16) => Prism' (Cell a) a
 _Known =
     prism'
-        mkKnown
+        (KnownRepr . toURepr)
         ( \case
-            KnownRepr d -> Just (toEnum (fromIntegral d))
+            KnownRepr d -> Just (fromURepr d)
             Possibly _ -> Nothing
         )
+{-# INLINE _Known #-}
 
 _Possibly :: forall a. Prism' (Cell a) (CellSet a)
 _Possibly =
@@ -265,8 +240,7 @@ _Possibly =
             KnownRepr _ -> Nothing
             Possibly cs -> Just cs
         )
-
--- makePrisms ''Cell
+{-# INLINE _Possibly #-}
 
 showLocB :: CellPos -> Builder
 showLocB (r, c, _) = "r" <> showb r <> "c" <> showb c

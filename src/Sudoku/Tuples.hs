@@ -173,7 +173,8 @@ findMatchingLocs' :: (Ord a) => [(CellPos, Cell a)] -> Traversal' [CommonPossibi
 findMatchingLocs' cs = traversed . filteredBy (commonCells . filtered (matchingSubset (S.fromList cs)))
 
 cellPartition ::
-    forall a. (Ord a, Enum a) => CellPos -> PartitionedPossibilities a -> Cell a -> PartitionedPossibilities a
+    forall a.
+    (Ord a, VU.IsoUnbox a Word16, Enum a) => CellPos -> PartitionedPossibilities a -> Cell a -> PartitionedPossibilities a
 cellPartition _ pp cell | has _Known cell = pp
 cellPartition i pp cell = updatePartitions pp
   where
@@ -221,11 +222,11 @@ cellAtLoc :: SudokuSetTraversal a -> Grid a -> CellPos -> (CellPos, Cell a)
 cellAtLoc l' g loc = (loc, g ^. singular (runIndexedTraversal l' . index loc))
 
 -- | partition cells that share `CommonPossibilities`.
-partitionCells :: (Ord a, Enum a) => SudokuSetTraversal a -> Grid a -> PartitionedPossibilities a
+partitionCells :: (Ord a, Enum a, VU.IsoUnbox a Word16) => SudokuSetTraversal a -> Grid a -> PartitionedPossibilities a
 partitionCells l = ifoldlOf' (runIndexedTraversal l) cellPartition []
 
 -- | partition a complete set of the digits by the locations they can exist in.
-partitionDigits :: (Ord a, Enum a) => SudokuSetTraversal a -> Grid a -> PartitionedPossibilities a
+partitionDigits :: (Ord a, Enum a, VU.IsoUnbox a Word16) => SudokuSetTraversal a -> Grid a -> PartitionedPossibilities a
 partitionDigits l g = foldl' (digitPartition l g knowns possibilities) [] [toEnum 0 ..]
   where
     ~knowns = digitLocationsAllOn l _Known g
@@ -409,11 +410,11 @@ wholeGridBySet =
 {- | work across the entire grid and remove possible digits from all cells by looking for tuples formed by cells
 that must contain a complete set of the digits.
 -}
-simplifyFromCellTuples :: (Ord a, TextShow a, VU.Unbox (Cell a), Enum a) => Grid a -> Grid a
+simplifyFromCellTuples :: (Ord a, TextShow a, VU.Unbox (Cell a), Enum a, VU.IsoUnbox a Word16) => Grid a -> Grid a
 simplifyFromCellTuples g = foldl' (simplifyFromTuplesOf partitionCells) g wholeGridBySet
 
 {- | work across the entire grid and remove possible digits from all cells by looking for tuples formed by digits
 along traversals where all digits must occur.
 -}
-simplifyFromDigitTuples :: (Ord a, TextShow a, VU.Unbox (Cell a), Enum a) => Grid a -> Grid a
+simplifyFromDigitTuples :: (Ord a, TextShow a, VU.Unbox (Cell a), Enum a, VU.IsoUnbox a Word16) => Grid a -> Grid a
 simplifyFromDigitTuples g = foldl' (simplifyFromTuplesOf partitionDigits) g wholeGridBySet
