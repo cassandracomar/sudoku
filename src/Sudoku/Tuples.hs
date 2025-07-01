@@ -13,18 +13,28 @@ import Data.Foldable
 import Data.List (sort, sortBy)
 import Data.Maybe (fromMaybe)
 import Data.Set.Lens
-import Data.Text.Lazy (Text)
 import Data.Word (Word16)
-import Sudoku.Cell (Cell (Possibly), CellPos, CellSet (CellSet), bsfolded, _CellSet, _Known, _Possibly)
+import Sudoku.Cell (
+    Cell (Possibly),
+    CellPos,
+    CellSet (CellSet),
+    RegionIndicator (..),
+    bsfolded,
+    _CellSet,
+    _Known,
+    _Possibly,
+    _majorMinor,
+ )
 import Sudoku.Grid
 import Sudoku.Summaries (
+    ExplainDesc (TupleDesc),
     RegionSummaries,
     applySummary,
     byRegion,
     ixSummary,
     riToLens,
  )
-import TextShow (TextShow (showb), toLazyText)
+import TextShow (TextShow)
 
 import Data.BitSet qualified as A.BS
 import Data.Map.Monoidal.Strict qualified as M
@@ -124,12 +134,15 @@ applyPartitions l sel summs g = g & knownTuples .~ newTuples & applySummary mkUp
     mkUpdate s loc cell = upd cell (cellUpdateFromPartitions l loc s)
 
 explainPartitions ::
-    forall a s. (TextShow a) => Grid a -> Lens' s [CommonPossibilities a] -> RegionIndicator -> Int -> s -> [Text]
+    forall a s.
+    (TextShow a, Enum a) => Grid a -> Lens' s [CommonPossibilities a] -> RegionIndicator -> Int -> s -> [ExplainDesc a]
 explainPartitions _ sel ri i cps
-    | not (null parts') = toLazyText <$> ("Found tuples in " <> showb ri <> " " <> showb i <> ":") : fmap showb parts'
+    | not (null parts') = fmap partToDesc parts'
     | otherwise = []
   where
     parts' = filterTooSmall (cps ^. sel)
+    locToMinorIdx loc = (ri, loc) ^. _majorMinor . _3 . to toEnum
+    partToDesc (CommonPossibilities locs poss) = TupleDesc ri i (A.BS.fromList (locs ^.. folded . _1 . to locToMinorIdx)) (A.BS.fromList $ poss ^.. folded)
     filterTooSmall = filter (\cp -> nPoss cp > 1 && nCells cp > 1)
 
 {- | a cell can be added to a partition iff its possible `Digit`s are a subset of the `Digit`s already in the partition
@@ -227,7 +240,7 @@ partitionCells l = ifoldlOf' (runIndexedTraversal l) cellPartition []
 
 -- | partition a complete set of the digits by the locations they can exist in.
 partitionDigits :: (Ord a, Enum a, VU.IsoUnbox a Word16) => SudokuSetTraversal a -> Grid a -> PartitionedPossibilities a
-partitionDigits l g = foldl' (digitPartition l g knowns possibilities) [] [toEnum 0 ..]
+partitionDigits l g = foldl' (digitPartition l g knowns possibilities) [] [toEnum 0 .. toEnum 8]
   where
     ~knowns = digitLocationsAllOn l _Known g
     ~possibilities = digitLocationsAllOn l (_Possibly . _CellSet . bsfolded) g
@@ -387,7 +400,7 @@ simplifyFromTupleOf g cp = cleanAll & knownTuples %~ S.insert cp
         removePossibilitiesOfOn
             (runIndexedTraversal l' . indices inTuple)
             (folded . filtered (not . flip S.member poss))
-            [toEnum 0 ..]
+            [toEnum 0 .. toEnum 8]
 
 {- | update possibilities along a complete set of the digits by finding tuples and removing their digits from the
 rest of the set.

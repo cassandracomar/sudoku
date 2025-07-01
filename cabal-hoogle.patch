@@ -1,0 +1,67 @@
+diff --git a/cabal-hoogle.cabal b/cabal-hoogle.cabal
+index 3b377bb..78bf810 100644
+--- a/cabal-hoogle.cabal
++++ b/cabal-hoogle.cabal
+@@ -24,7 +24,7 @@ source-repository head
+ library
+   build-depends:
+     , base                  >=4.14     && <5
+-    , Cabal                 >=3.10     && <3.14
++    , Cabal                 >=3.10     && <3.15
+     , cabal-install         >=3.10     && <3.14
+     , Cabal-syntax          >=3.10     && <3.14
+     , co-log-core           >=0.2      && <0.4
+diff --git a/src/Hoogle/Cabal/Command/Common.hs b/src/Hoogle/Cabal/Command/Common.hs
+index 64cc507..edad6cf 100644
+--- a/src/Hoogle/Cabal/Command/Common.hs
++++ b/src/Hoogle/Cabal/Command/Common.hs
+@@ -18,8 +18,13 @@ import Distribution.Client.ProjectOrchestration
+ import Distribution.Client.ScriptUtils
+ import Distribution.Client.Setup (GlobalFlags, InstallFlags (..), defaultGlobalFlags)
+ import Distribution.Simple (OptimisationLevel (NoOptimisation))
+-import Distribution.Simple.Setup (ConfigFlags (..), Flag (..), HaddockFlags (..))
++import Distribution.Simple.Setup
++    ( ConfigFlags(..),
++      Flag(..),
++      HaddockFlags(..),
++      CommonSetupFlags(..) )
+ import Distribution.Simple.Utils (die')
++import Distribution.Utils.Path (makeSymbolicPath)
+ import qualified Distribution.Verbosity as Verbosity
+ import Options.Applicative
+ import System.FilePath ((</>))
+@@ -111,9 +116,10 @@ readContext GlobalOptions {..} targetStrings =
+       defaultFlags
+         { configFlags =
+             (configFlags defaultFlags)
+-              { configOptimization = Flag NoOptimisation,
+-                configDistPref = Flag _globalOptions_builddir
+-              },
++                { configOptimization = Flag NoOptimisation
++                , configCommonFlags = (configCommonFlags (configFlags defaultFlags))
++                                          { setupDistPref = Flag (makeSymbolicPath _globalOptions_builddir) }
++                },
+           haddockFlags =
+             (haddockFlags defaultFlags)
+               { haddockHoogle = Flag True,
+diff --git a/src/Hoogle/Cabal/Command/Generate.hs b/src/Hoogle/Cabal/Command/Generate.hs
+index 38aaa4a..ab212bd 100644
+--- a/src/Hoogle/Cabal/Command/Generate.hs
++++ b/src/Hoogle/Cabal/Command/Generate.hs
+@@ -59,6 +59,7 @@ import System.Directory
+ import System.FilePath
+ import System.IO.Error (isDoesNotExistError)
+ import Prelude hiding (log)
++import Distribution.Utils.Path (makeSymbolicPath)
+ 
+ data Log
+   = LogBadInstallPlan UnitId (Maybe (InstallPlan.GenericPlanPackage InstalledPackageInfo ElaboratedConfiguredPackage))
+@@ -126,7 +127,7 @@ action logger globalOptions (Command targets) = do
+ symlinkLocalPackages :: Logger Log -> [FilePath] -> FilePath -> IO [(String, LocalBuildInfo)]
+ symlinkLocalPackages logger pkgsPath destDir = do
+   fmap catMaybes . forM pkgsPath $ \pkgPath -> runMaybeT $ do
+-    lbiEither <- liftIO $ tryGetPersistBuildConfig pkgPath
++    lbiEither <- liftIO $ tryGetPersistBuildConfig Nothing (makeSymbolicPath pkgPath)
+     lbi <- MaybeT $ case lbiEither of
+       Left configStateFileErr -> do
+         logWith logger Error $ LogCanNotReadSetupConfig pkgPath configStateFileErr

@@ -1,56 +1,97 @@
+diff --git a/Setup.hs b/Setup.hs
+index fe3f3352..801cc3c5 100755
+--- a/Setup.hs
++++ b/Setup.hs
+@@ -9,6 +9,7 @@ import Distribution.Simple.Setup
+ import Distribution.Simple.Utils
+ import Distribution.System
+ import Distribution.Verbosity
++import Distribution.Utils.Path (getSymbolicPath)
+ 
+ import Control.Monad
+ import Data.Maybe
+@@ -40,13 +41,13 @@ preConfHook args config_flags = do
+         -- Stack and cabal based builds require updating the submodules
+         git <- doesDirectoryExist ".git"
+         if git
+-           then rawSystemExit verbosity "git" ["submodule", "update", "--init", "--recursive"]
++           then rawSystemExit verbosity Nothing "git" ["submodule", "update", "--init", "--recursive"]
+            else do
+              -- XXX: This must be kept up to date with the git submodule revision
+              let archive = "v0.11.1.tar.gz"
+              createDirectoryIfMissing True "cbits/tracy"
+-             rawSystemExit verbosity "curl" ["-LO", "https://github.com/wolfpld/tracy/archive/refs/tags/" ++ archive]
+-             rawSystemExit verbosity "tar" ["-xzf", archive, "-C", "cbits/tracy", "--strip-components", "1"]
++             rawSystemExit verbosity Nothing "curl" ["-LO", "https://github.com/wolfpld/tracy/archive/refs/tags/" ++ archive]
++             rawSystemExit verbosity Nothing "tar" ["-xzf", archive, "-C", "cbits/tracy", "--strip-components", "1"]
+              removeFile archive
+ 
+   preConf simpleUserHooks args config_flags
+@@ -68,7 +69,7 @@ postBuildHook args build_flags pkg_desc lbi = do
+       _       ->
+         forM_ targets $ \(hs_exe, c_dir, c_exe) -> do
+           let c_projdir  = "cbits/tracy" </> c_dir
+-              hs_builddir = buildDir lbi </> hs_exe
++              hs_builddir = getSymbolicPath (buildDir lbi) </> hs_exe
+               hs_tmpdir   = hs_builddir </> hs_exe ++ "-tmp"
+ 
+           -- TODO: This creates a separate build directory for each tracy
+@@ -90,12 +91,12 @@ postBuildHook args build_flags pkg_desc lbi = do
+             setupMessage verbosity (printf "Building executable '%s' from Tracy C++ sources for" hs_exe) (package pkg_desc)
+ 
+             -- We set LEGACY=1 so that tracy builds with X11 instead of Wayland.
+-            rawSystemExit verbosity "cmake" ["-B", hs_tmpdir, "-S", c_projdir, "-DCMAKE_BUILD_TYPE=Release", "-DLEGACY=1"]
++            rawSystemExit verbosity Nothing "cmake" ["-B", hs_tmpdir, "-S", c_projdir, "-DCMAKE_BUILD_TYPE=Release", "-DLEGACY=1", "-DBUILD_SHARED_LIBS=on", "-DTRACY_STATIC=off", "-DDOWNLOAD_CAPSTONE=off", "-DDOWNLOAD_ZSTD=off"]
+ 
+             -- Build in parallel with 2 jobs because likely, accelerate is one of
+             -- the last dependencies in a build, so we aren't stealing CPU time
+             -- from other packages, and tracy takes way too long to build
+-            rawSystemExit verbosity "cmake" ["--build", hs_tmpdir, "--config", "Release", "-j", "2"]
++            rawSystemExit verbosity Nothing "cmake" ["--build", hs_tmpdir, "--config", "Release", "-j", "2"]
+ 
+             -- Copy, not rename, to prevent cmake from linking again on the next
+             -- reconfigure
 diff --git a/accelerate.cabal b/accelerate.cabal
-index 6a3c5e40..43bb65f3 100644
+index 20890a53..d484e99f 100644
 --- a/accelerate.cabal
 +++ b/accelerate.cabal
-@@ -339,7 +339,7 @@ flag nofib
+@@ -334,7 +334,7 @@ flag nofib
  
  library
    build-depends:
--          base                          >= 4.12 && < 4.20
-+          base                          >= 4.12 && < 4.21
+-          base                          >= 4.12 && < 4.21
++          base                          >= 4.12 && < 4.22
          , ansi-terminal                 >= 0.6.2
          , base-orphans                  >= 0.3
          , bytestring                    >= 0.10.2
-diff --git a/src/Data/Array/Accelerate/Pattern/TH.hs b/src/Data/Array/Accelerate/Pattern/TH.hs
-index b3f43f4a..01d3a9df 100644
---- a/src/Data/Array/Accelerate/Pattern/TH.hs
-+++ b/src/Data/Array/Accelerate/Pattern/TH.hs
-@@ -32,6 +32,7 @@ import Language.Haskell.TH.Extra                                    hiding ( Exp
- import Numeric
- import Text.Printf
- import qualified Language.Haskell.TH.Extra                          as TH
-+import Language.Haskell.TH                                          (NamespaceSpecifier (NoNamespaceSpecifier))
+@@ -356,7 +356,7 @@ library
+         , prettyprinter-ansi-terminal   >= 1.1.2
+         , primitive                     >= 0.6.4
+         , tasty                         >= 0.11
+-        , template-haskell              < 2.23
++        , template-haskell              < 2.24
+         , terminal-size                 >= 0.3
+         , text                          >= 1.2.4
+         , transformers                  >= 0.3
+@@ -602,6 +602,8 @@ library
  
- import GHC.Stack
+     if impl(ghc >= 8.10)
+       ghc-options:
++        -optc=-DACCELERATE_DEBUG
++        -optcxx=-DACCELERATE_DEBUG
+         -optcxx=-DTRACY_ENABLE
+         -optcxx=-DTRACY_NO_SAMPLING
  
-@@ -181,7 +182,7 @@ mkConP tn' tvs' con' = do
-                      ]
-       r' <- case mf of
-               Nothing -> return r
--              Just f  -> return (InfixD f pat : r)
-+              Just f  -> return (InfixD f NoNamespaceSpecifier pat : r)
-       return (pat, r')
-       where
-         pat = mkName (':' : nameBase cn)
-@@ -273,7 +274,7 @@ mkConS tn' tvs' prev' next' tag' con' = do
-                      ]
-       r' <- case mf of
-               Nothing -> return r
--              Just f  -> return (InfixD f pat : r)
-+              Just f  -> return (InfixD f NoNamespaceSpecifier  pat : r)
-       return r'
-       where
-         sig = forallT
-diff --git a/src/Data/BitSet.hs b/src/Data/BitSet.hs
-index f06169bc..184bc051 100644
---- a/src/Data/BitSet.hs
-+++ b/src/Data/BitSet.hs
-@@ -14,7 +14,7 @@
- module Data.BitSet where
+diff --git a/src/Data/Array/Accelerate/Debug/Trace.hs b/src/Data/Array/Accelerate/Debug/Trace.hs
+index f4eba109..64a8f6d3 100644
+--- a/src/Data/Array/Accelerate/Debug/Trace.hs
++++ b/src/Data/Array/Accelerate/Debug/Trace.hs
+@@ -33,7 +33,7 @@ import Data.Array.Accelerate.Sugar.Elt
+ import qualified Data.Array.Accelerate.Representation.Array         as R
+ import qualified Data.Array.Accelerate.Representation.Shape         as R
  
- import Data.Bits
--import Prelude                                            hiding ( foldl, foldr )
-+import Prelude                                            hiding ( foldl, foldr, foldl' )
- import qualified Data.List                                as List
+-import Data.Text
++import Data.Text hiding (show)
  
- import GHC.Exts                                           ( IsList, build )
+ 
+ -- $tracing

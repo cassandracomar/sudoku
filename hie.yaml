@@ -1,13 +1,3 @@
 cradle:
   cabal:
-    - path: "src"
-      component: "lib:sudoku"
-
-    - path: "app/Main.hs"
-      component: "sudoku:exe:sudoku"
-
-    - path: "test"
-      component: "sudoku:test:sudoku-test"
-
-    - path: "test/Bench.hs"
-      component: "sudoku:exe:sudoku-bench"
+    component: all

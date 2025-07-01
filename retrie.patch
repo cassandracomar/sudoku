@@ -1,0 +1,710 @@
+diff --git a/Retrie/Context.hs b/Retrie/Context.hs
+index 4faf24d..974456e 100644
+--- a/Retrie/Context.hs
++++ b/Retrie/Context.hs
+@@ -58,10 +58,10 @@ updateContext c i =
+     neverParen = c { ctxtParentPrec = NeverParen }
+ 
+     updExp :: HsExpr GhcPs -> Context
+-    updExp HsApp{} = withPrec c (SourceText "HsApp") 10 InfixL i
++    updExp HsApp{} = withPrec c 10 InfixL i
+     updExp (OpApp _ _ op _)
+-      | Fixity source prec dir <- lookupOp op $ ctxtFixityEnv c =
+-          withPrec c source prec dir i
++      | Fixity prec dir <- lookupOp op $ ctxtFixityEnv c =
++          withPrec c prec dir i
+ #if __GLASGOW_HASKELL__ < 904 || __GLASGOW_HASKELL__ >= 910
+     updExp (HsLet _ lbs _) = addInScope neverParen $ collectLocalBinders CollNoDictBinders lbs
+ #else
+@@ -70,15 +70,15 @@ updateContext c i =
+     updExp _ = neverParen
+ 
+     updType :: HsType GhcPs -> Context
+-    updType HsAppTy{} = withPrec c (SourceText "HsAppTy") (getPrec appPrec) InfixL i
+-    updType HsFunTy{} = withPrec c (SourceText "HsFunTy") (getPrec funPrec) InfixR (i - 1)
+-    updType _ = withPrec c (SourceText "HsType") (getPrec appPrec) InfixN i
++    updType HsAppTy{} = withPrec c (getPrec appPrec) InfixL i
++    updType HsFunTy{} = withPrec c (getPrec funPrec) InfixR (i - 1)
++    updType _ = withPrec c (getPrec appPrec) InfixN i
+ 
+     updMatch :: Match GhcPs (LHsExpr GhcPs) -> Context
+     updMatch
+       | i == 2  -- m_pats field
+-      = addInScope c{ctxtParentPrec = IsLhs} . collectPatsBinders CollNoDictBinders . m_pats
+-      | otherwise = addInScope neverParen . collectPatsBinders CollNoDictBinders . m_pats
++      = addInScope c{ctxtParentPrec = IsLhs} . collectPatsBinders CollNoDictBinders . unLoc . m_pats
++      | otherwise = addInScope neverParen . collectPatsBinders CollNoDictBinders . unLoc . m_pats
+       where
+ 
+     updGRHSs :: GRHSs GhcPs (LHsExpr GhcPs) -> Context
+@@ -128,10 +128,10 @@ updateContext c i =
+ getPrec :: PprPrec -> Int
+ getPrec (PprPrec prec) = prec
+ 
+-withPrec :: Context -> SourceText -> Int -> FixityDirection -> Int -> Context
+-withPrec c source prec dir i = c{ ctxtParentPrec = HasPrec fixity }
++withPrec :: Context -> Int -> FixityDirection -> Int -> Context
++withPrec c prec dir i = c{ ctxtParentPrec = HasPrec fixity }
+   where
+-    fixity = Fixity source prec d
++    fixity = Fixity prec d
+     d = case dir of
+       InfixL
+         | i == firstChild -> InfixL
+diff --git a/Retrie/ExactPrint.hs b/Retrie/ExactPrint.hs
+index bb3f3f1..f12df79 100644
+--- a/Retrie/ExactPrint.hs
++++ b/Retrie/ExactPrint.hs
+@@ -34,7 +34,7 @@ module Retrie.ExactPrint
+     -- * Utils
+   , debugDump
+   , debugParse
+-  , debug
++  , E.debug
+   , hasComments
+   , isComma
+     -- * Annotated AST
+@@ -67,7 +67,7 @@ import qualified Language.Haskell.GHC.ExactPrint.Parsers as Parsers
+ import Language.Haskell.GHC.ExactPrint.Types
+   ( showGhc
+   )
+--- import Language.Haskell.GHC.ExactPrint.Transform
++import qualified Language.Haskell.GHC.ExactPrint.Utils as E
+ 
+ import Retrie.ExactPrint.Annotated
+ import Retrie.Fixity
+@@ -96,7 +96,7 @@ fix env = fixAssociativity >=> fixEntryDP
+ 
+ -- Should (x op1 y) op2 z be reassociated as x op1 (y op2 z)?
+ associatesRight :: Fixity -> Fixity -> Bool
+-associatesRight (Fixity _ p1 a1) (Fixity _ p2 _a2) =
++associatesRight (Fixity p1 a1) (Fixity p2 _a2) =
+   p2 > p1 || p1 == p2 && a1 == InfixR
+ 
+ 
+@@ -186,14 +186,16 @@ stripComments (SrcSpanAnn EpAnnNotUsed l) = SrcSpanAnn EpAnnNotUsed l
+ stripComments (SrcSpanAnn (EpAnn anc an _) l) = SrcSpanAnn (EpAnn anc an emptyComments) l
+ #endif
+ 
+-#if __GLASGOW_HASKELL__ >= 910
+ transferComments :: EpAnn an -> LocatedAn aa b -> EpAnn an -> EpAnn an
+-transferComments (EpAnn _anc _an cs0) (L (EpAnn anc0 _ _) _) (EpAnn anc an cs1) = EpAnn anc an (addCommentOrigDeltas cs')
++transferComments (EpAnn _anc _an cs0) (L (EpAnn anc0 _ _) _) (EpAnn anc an cs1) = EpAnn
++  { entry = anc
++  , anns = an
++  , comments = cs'
++  }
+     where
+       cs' = case anc0 of
+           EpaSpan (RealSrcSpan r _) -> splitCommentsStart r (cs0 <> cs1)
+           _ -> cs0 <> cs1
+-#endif
+ 
+ -- Move leading whitespace from the left child of an operator application
+ -- to the application itself. We need this so we have correct offsets when
+@@ -416,7 +418,7 @@ transferAnchor (L (SrcSpanAnn (EpAnn anc _ _) _) _) lb = setAnchorAn lb anc
+ 
+ #if __GLASGOW_HASKELL__ >= 910
+ deltaComments :: LocatedAn a b -> LocatedAn a b
+-deltaComments (L (EpAnn anc an cs) a) = L (EpAnn anc an (addCommentOrigDeltas cs)) a
++deltaComments (L (EpAnn anc an cs) a) = L (EpAnn anc an cs) a
+ 
+ stripCommentsA :: LocatedAn a b -> LocatedAn a b
+ stripCommentsA (L (EpAnn anc an _cs) a) = L (EpAnn anc an emptyComments) a
+diff --git a/Retrie/ExactPrint/Compat.hs b/Retrie/ExactPrint/Compat.hs
+index 8a8c533..ae4dbd1 100644
+--- a/Retrie/ExactPrint/Compat.hs
++++ b/Retrie/ExactPrint/Compat.hs
+@@ -12,10 +12,10 @@ module Retrie.ExactPrint.Compat
+     , E.d0
+     , E.uniqueSrcSpanT
+ #if __GLASGOW_HASKELL__ >= 910
+-    , E.addCommentOrigDeltas
++    , E.commentOrigDelta
+     , transferEntryDP
+-    , E.splitCommentsStart
+-    , E.splitCommentsEnd
++    , splitCommentsStart
++    , commentOrigDeltas
+ #else
+     , E.transferEntryDP
+ #endif
+@@ -23,10 +23,29 @@ module Retrie.ExactPrint.Compat
+ 
+ import qualified Language.Haskell.GHC.ExactPrint.Utils as E
+ import qualified Language.Haskell.GHC.ExactPrint.Transform as E
++import GHC.Hs
+ import Language.Haskell.GHC.ExactPrint (ExactPrint(..), parseModule, exactPrint, makeDeltaAst)
++import GHC.Types.SrcLoc
+ 
+ #if __GLASGOW_HASKELL__ >= 910
+ transferEntryDP a b = pure $ E.transferEntryDP a b
++splitCommentsStart p (EpaComments cs) = cs'
++  where
++    cmp (L (EpaSpan (RealSrcSpan l _)) _) = E.ss2pos l > E.ss2posEnd p
++    cmp (L _ _) = True
++    (before, after) = break cmp cs
++    cs' = case after of
++      [] -> EpaComments cs
++      _ -> E.epaCommentsBalanced before after
++splitCommentsStart p (EpaCommentsBalanced cs ts) = E.epaCommentsBalanced cs' ts'
++  where
++    cmp (L (EpaSpan (RealSrcSpan l _)) _) = E.ss2pos l > E.ss2posEnd p
++    cmp (L _ _) = True
++    (before, after) = break cmp cs
++    cs' = before
++    ts' = after <> ts
++commentOrigDeltas [] = []
++commentOrigDeltas lcs = map E.commentOrigDelta lcs
+ #else
+ 
+ #endif
+diff --git a/Retrie/Expr.hs b/Retrie/Expr.hs
+index 7e60cc5..f3912dd 100644
+--- a/Retrie/Expr.hs
++++ b/Retrie/Expr.hs
+@@ -8,6 +8,7 @@
+ {-# LANGUAGE StandaloneDeriving #-}
+ {-# LANGUAGE TupleSections #-}
+ {-# LANGUAGE ViewPatterns #-}
++{-# OPTIONS_GHC -Wno-incomplete-patterns #-}
+ module Retrie.Expr
+   ( bitraverseHsConDetails
+   , getUnparened
+@@ -50,6 +51,7 @@ import Retrie.Types
+ -- #if __GLASGOW_HASKELL__ < 910
+ import Retrie.Util
+ -- #endif
++import GHC.Parser.Annotation
+ 
+ -------------------------------------------------------------------------------
+ 
+@@ -73,8 +75,8 @@ dpAnchor l dp = Anchor (realSrcSpan l) (MovedAnchor dp)
+ setMoveAnchor :: DeltaPos -> EpAnn an -> EpAnn an
+ setMoveAnchor _dp ep@(EpAnn (EpaSpan _) _an _cs)
+   = ep
+-setMoveAnchor dp (EpAnn (EpaDelta _ cs1) an cs)
+-  = (EpAnn (EpaDelta dp cs1) an cs)
++setMoveAnchor dp (EpAnn (EpaDelta s _ cs1) an cs)
++  = (EpAnn (EpaDelta s dp cs1) an cs)
+ #endif
+ 
+ 
+@@ -104,12 +106,12 @@ mkLocA dp e = mkLocAA dp
+ -- ++AZ++:TODO: move to ghc-exactprint
+ mkLocAA :: (Data e, Monad m) => DeltaPos -> an -> e -> TransformT m (LocatedAn an e)
+ mkLocAA dp an e = do
+-#if __GLASGOW_HASKELL__ < 910
+   l <- uniqueSrcSpanT
++#if __GLASGOW_HASKELL__ < 910
+   let anc = Anchor (realSrcSpan l) (MovedAnchor dp)
+   return (L (SrcSpanAnn (EpAnn anc an emptyComments) l) e)
+ #else
+-  let anc = EpaDelta dp []
++  let anc = EpaDelta l dp []
+   return (L (EpAnn anc an emptyComments) e)
+ #endif
+ 
+@@ -120,35 +122,46 @@ mkEpAnn dp an = do
+   anc <- mkAnchor dp
+   return $ EpAnn anc an emptyComments
+ 
+-mkAnchor :: Monad m => DeltaPos -> TransformT m (Anchor)
+-mkAnchor dp = do
+ #if __GLASGOW_HASKELL__ < 910
++mkAnchor :: Monad m => DeltaPos -> TransformT m Anchor
++mkAnchor dp = do
+   l <- uniqueSrcSpanT
+   return (Anchor (realSrcSpan l) (MovedAnchor dp))
+ #else
+-  return (EpaDelta dp [])
++mkAnchor :: Monad m => DeltaPos -> TransformT m EpaLocation
++mkAnchor dp = do
++  l <- uniqueSrcSpanT
++  return (EpaDelta l dp [])
+ #endif
+ 
+ -------------------------------------------------------------------------------
+ 
+ mkLams
+-  :: [LPat GhcPs]
++  ::
++#if  __GLASGOW_HASKELL__ < 910
++    [LPat GhcPs]
++#else
++   LocatedE [LPat GhcPs]
++#endif
+   -> LHsExpr GhcPs
+   -> TransformT IO (LHsExpr GhcPs)
++#if  __GLASGOW_HASKELL__ < 910
+ mkLams [] e = return e
++#else
++mkLams (L _ []) e = return e
++#endif
+ mkLams vs e = do
+   ancg <- mkAnchor (SameLine 0)
+-#if __GLASGOW_HASKELL__ < 910
+   ancm <- mkAnchor (SameLine 0)
+-#endif
++  ancl <- mkAnchor (SameLine 0)
+   let
+-    ga = GrhsAnn Nothing (AddEpAnn AnnRarrow (EpaDelta (SameLine 1) []))
++    ga = GrhsAnn Nothing undefined
+     ang = EpAnn ancg ga emptyComments
+     anm =
+ #if __GLASGOW_HASKELL__ < 910
+       EpAnn ancm [(AddEpAnn AnnLam (EpaDelta (SameLine 0) []))] emptyComments
+ #else
+-      [(AddEpAnn AnnLam (EpaDelta (SameLine 0) []))]
++      EpAnn ancm NoExtField emptyComments
+ #endif
+     L l (Match _x ctxt pats (GRHSs cs grhs binds)) = mkMatch
+ #if __GLASGOW_HASKELL__ < 910
+@@ -160,7 +173,7 @@ mkLams vs e = do
+     grhs' = case grhs of
+       [L lg (GRHS _an guards rhs)] -> [L lg (GRHS ang guards rhs)]
+       _ -> fail "mkLams: lambda expression can only have a single grhs!"
+-  matches <- mkLocA (SameLine 0) [L l (Match anm ctxt pats (GRHSs cs grhs' binds))]
++  matches <- mkLocA (SameLine 0) [L l (Match NoExtField ctxt pats (GRHSs cs grhs' binds))]
+   let
+     mg =
+ #if __GLASGOW_HASKELL__ < 908
+@@ -172,7 +185,7 @@ mkLams vs e = do
+ #endif
+   mkLocA (SameLine 1) $ HsLam
+ #if __GLASGOW_HASKELL__ >= 910
+-                              []
++                              (EpAnnLam (EpTok d0) Nothing)
+                               LamSingle
+ #else
+                               noExtField
+@@ -181,7 +194,7 @@ mkLams vs e = do
+ 
+ mkLet :: Monad m => HsLocalBinds GhcPs -> LHsExpr GhcPs -> TransformT m (LHsExpr GhcPs)
+ mkLet EmptyLocalBinds{} e = return e
+-mkLet lbs e = do
++mkLet lbs e@(L l _) = do
+ #if __GLASGOW_HASKELL__ < 904
+   an <- mkEpAnn (DifferentLine 1 5)
+                 (AnnsLet {
+@@ -197,8 +210,8 @@ mkLet lbs e = do
+       tokIn = L (TokenLoc (EpaDelta (DifferentLine 1 1) [])) HsTok
+   le <- mkLocA (SameLine 1) $ HsLet an tokLet lbs tokIn e
+ #else
+-  let tokLet = EpTok (EpaDelta (SameLine 0) [])
+-      tokIn = EpTok (EpaDelta (DifferentLine 1 1) [])
++  let tokLet = EpTok $ EpaDelta (l2l l) (SameLine 0) []
++      tokIn = EpTok $ EpaDelta (l2l l) (DifferentLine 1 1) []
+   le <- mkLocA (SameLine 1) $ HsLet (tokLet, tokIn) lbs e
+ #endif
+   return le
+@@ -298,12 +311,18 @@ patToExpr orig = case dLPat orig of
+     go (ListPat _ ps) = do
+       ps' <- mapM patToExpr ps
+       lift $ do
+-        let al = (AnnList Nothing (Just (AddEpAnn AnnOpenS d0)) (Just (AddEpAnn AnnCloseS d0)) [] [])
+ #if __GLASGOW_HASKELL__ < 910
++        let al = (AnnList Nothing (Just (AddEpAnn AnnOpenS d0)) (Just (AddEpAnn AnnCloseS d0)) [] [])
+         an <- mkEpAnn (SameLine 1) al
+         el <- mkLocA (SameLine 1) $ ExplicitList an ps'
+ #else
++#if __GLASGOW_HASKELL__ < 912
++        let al = (AnnList Nothing (Just (AddEpAnn AnnOpenS d0)) (Just (AddEpAnn AnnCloseS d0)) [] [])
++        el <- mkLocA (SameLine 1) $ ExplicitList al ps'
++#else
++        let al = AnnList Nothing (ListSquare (EpTok d0) (EpTok d0)) [] () []
+         el <- mkLocA (SameLine 1) $ ExplicitList al ps'
++#endif
+ #endif
+         return el
+     go (LitPat _ lit) = lift $ do
+@@ -336,10 +355,10 @@ patToExpr orig = case dLPat orig of
+           tokRP = L (TokenLoc (EpaDelta (SameLine 0) [])) HsTok
+       lift $ mkLocA (SameLine 1) (HsPar an tokLP p tokRP)
+ #else
+-    go (ParPat _an p') = do
++    go (ParPat an p') = do
+       p <- patToExpr p'
+-      let tokLP = EpTok (EpaDelta (SameLine 0) [])
+-          tokRP = EpTok (EpaDelta (SameLine 0) [])
++      let tokLP = EpTok d0
++          tokRP = EpTok d0
+       lift $ mkLocA (SameLine 1) (HsPar (tokLP, tokRP) p)
+ #endif
+     go SigPat{} = error "patToExpr SigPat"
+@@ -367,7 +386,7 @@ conPatHelper :: MonadIO m
+              -> PatQ m (LHsExpr GhcPs)
+ conPatHelper con (InfixCon x y) =
+   lift . mkLocA (SameLine 1)
+-               =<< OpApp <$> pure noAnn
++               =<< OpApp <$> pure NoExtField
+                          <*> patToExpr x
+                          <*> lift (mkLocatedHsVar con)
+                          <*> patToExpr y
+@@ -393,7 +412,7 @@ precedence :: FixityEnv -> HsExpr GhcPs -> Maybe Fixity
+ #if __GLASGOW_HASKELL__ < 908
+ precedence _        (HsApp {})       = Just $ Fixity (SourceText "HsApp") 10 InfixL
+ #else
+-precedence _        (HsApp {})       = Just $ Fixity (SourceText (fsLit "HsApp")) 10 InfixL
++precedence _        (HsApp {})       = Just $ Fixity 10 InfixL
+ #endif
+ precedence fixities (OpApp _ _ op _) = Just $ lookupOp op fixities
+ precedence _        _                = Nothing
+@@ -411,8 +430,8 @@ parenify Context{..} le@(L ll e)
+     in mkParen' (getEntryDP le) (\an -> HsPar an tokLP (setEntryDP le (SameLine 0)) tokRP)
+ #else
+   | needed ctxtParentPrec (precedence ctxtFixityEnv e) && needsParens e = do
+-    let tokLP = EpTok (EpaDelta (SameLine 0) [])
+-        tokRP = EpTok (EpaDelta (SameLine 0) [])
++    let tokLP = EpTok d0
++        tokRP = EpTok d0
+     let le' = setEntryDP le (SameLine 0) :: LHsExpr GhcPs
+     let r = L ll (HsPar (tokLP, tokRP) le') :: LHsExpr GhcPs
+     -- lift $ liftIO $ debugPrint Loud "parenify:r="  [showAst  (getLoc r)]
+@@ -421,7 +440,7 @@ parenify Context{..} le@(L ll e)
+   | otherwise = return le
+   where
+            {- parent -}               {- child -}
+-    needed (HasPrec (Fixity _ p1 d1)) (Just (Fixity _ p2 d2)) =
++    needed (HasPrec (Fixity p1 d1)) (Just (Fixity p2 d2)) =
+       p1 > p2 || (p1 == p2 && (d1 /= d2 || d2 == InfixN))
+     needed NeverParen _ = False
+     needed _ Nothing = True
+@@ -483,11 +502,11 @@ mkParen' :: (Data x, Monad m
+          => DeltaPos -> (EpAnn NoEpAnns -> x) -> TransformT m (LocatedAn an x)
+ mkParen' dp k = do
+   let an = NoEpAnns
+-#if __GLASGOW_HASKELL__ < 910
+   l <- uniqueSrcSpanT
++#if __GLASGOW_HASKELL__ < 910
+   let anc = Anchor (realSrcSpan l) (MovedAnchor (SameLine 0))
+ #else
+-  let anc = EpaDelta (SameLine 0) []
++  let anc = EpaDelta l (SameLine 0) []
+ #endif
+   pe <- mkLocA dp (k (EpAnn anc an emptyComments))
+   return pe
+@@ -500,12 +519,12 @@ mkParenTy :: (Data x, Monad m
+ #endif
+          => DeltaPos -> (EpAnn AnnParen -> x) -> TransformT m (LocatedAn an x)
+ mkParenTy dp k = do
+-  let an = AnnParen AnnParens d0 d0
+-#if __GLASGOW_HASKELL__ < 910
++  let an = AnnParens (EpTok d0) (EpTok d0)
+   l <- uniqueSrcSpanT
++#if __GLASGOW_HASKELL__ < 910
+   let anc = Anchor (realSrcSpan l) (MovedAnchor (SameLine 0))
+ #else
+-  let anc = EpaDelta (SameLine 0) []
++  let anc = EpaDelta l (SameLine 0) []
+ #endif
+   pe <- mkLocA dp (k (EpAnn anc an emptyComments))
+   return pe
+@@ -529,8 +548,8 @@ parenifyP Context{..} p@(L _ pat)
+         tokRP = L (TokenLoc (EpaDelta (SameLine 0) [])) HsTok
+      in mkParen' (getEntryDP p) (\an -> ParPat an tokLP (setEntryDP p (SameLine 0)) tokRP)
+ #else
+-    let tokLP = EpTok (EpaDelta (SameLine 0) [])
+-        tokRP = EpTok (EpaDelta (SameLine 0) [])
++    let tokLP = EpTok d0
++        tokRP = EpTok d0
+      in mkParen' (getEntryDP p) (\_an -> ParPat (tokLP, tokRP) (setEntryDP p (SameLine 0)))
+ #endif
+ #endif
+@@ -562,16 +581,16 @@ parenifyT Context{..} lty@(L _ ty)
+ #elif __GLASGOW_HASKELL__ < 910
+       mkParenTy (getEntryDP lty) (\an -> HsParTy an (setEntryDP lty (SameLine 0)))
+ #else
+-      mkParenTy (getEntryDP lty) (\an -> HsParTy (anns an) (setEntryDP lty (SameLine 0)))
++      mkParenTy (getEntryDP lty) (\an -> HsParTy (EpTok d0, EpTok d0) (setEntryDP lty (SameLine 0)))
+ #endif
+   | otherwise = return lty
+   where
+     needed t = case ctxtParentPrec of
+-      HasPrec (Fixity _ prec InfixN) -> hsTypeNeedsParens (PprPrec prec) t
++      HasPrec (Fixity prec InfixN) -> hsTypeNeedsParens (PprPrec prec) t
+       -- We just assume we won't have mixed 'FixityDirection's for 'HsType',
+       -- this is not true for 'HsFunTy' (@infixr 2@) and 'HsOpTy' (@infixl 2@).
+       -- Currently, we will simply always add parens around 'HsOpTy'.
+-      HasPrec (Fixity _ prec _) -> hsTypeNeedsParens (PprPrec $ prec - 1) t
++      HasPrec (Fixity prec _) -> hsTypeNeedsParens (PprPrec $ prec - 1) t
+       IsLhs -> False
+       NeverParen -> False
+ 
+diff --git a/Retrie/Fixity.hs b/Retrie/Fixity.hs
+index 4cf5d08..4b5ca5c 100644
+--- a/Retrie/Fixity.hs
++++ b/Retrie/Fixity.hs
+@@ -45,7 +45,7 @@ extendFixityEnv l (FixityEnv env) =
+ ppFixityEnv :: FixityEnv -> String
+ ppFixityEnv = unlines . map ppFixity . nonDetEltsUFM . unFixityEnv
+   where
+-    ppFixity (fs, Fixity _ p d) = unwords
++    ppFixity (fs, Fixity p d) = unwords
+       [ case d of
+           InfixN -> "infix"
+           InfixL -> "infixl"
+diff --git a/Retrie/GHC.hs b/Retrie/GHC.hs
+index 92d72cc..5ee39d1 100644
+--- a/Retrie/GHC.hs
++++ b/Retrie/GHC.hs
+@@ -5,6 +5,7 @@
+ --
+ {-# LANGUAGE CPP #-}
+ {-# LANGUAGE RecordWildCards #-}
++{-# LANGUAGE LambdaCase #-}
+ module Retrie.GHC
+   ( module Retrie.GHC
+   , module GHC.Data.Bag
+@@ -128,11 +129,7 @@ ruleBindersToQs bs = catMaybes
+   ]
+ 
+ tyBindersToLocatedRdrNames :: [LHsTyVarBndr s GhcPs] -> [LocatedN RdrName]
+-tyBindersToLocatedRdrNames vars = catMaybes
+-  [ case var of
+-      UserTyVar _ _ v -> Just v
+-      KindedTyVar _ _ v _ -> Just v
+-  | L _ var <- vars ]
++tyBindersToLocatedRdrNames vars = catMaybes $ hsLTyVarLocName <$> vars
+ 
+ data RuleInfo = RuleInfo
+   { riName :: RuleName
+diff --git a/Retrie/Monad.hs b/Retrie/Monad.hs
+index 36a0c62..df68874 100644
+--- a/Retrie/Monad.hs
++++ b/Retrie/Monad.hs
+@@ -124,7 +124,6 @@ instance Applicative Retrie where
+   (<*>) = ap
+ 
+ instance Monad Retrie where
+-  return = Pure
+   (>>=) = Bind
+ 
+ instance MonadIO Retrie where
+diff --git a/Retrie/PatternMap/Instances.hs b/Retrie/PatternMap/Instances.hs
+index 4e20ac7..4c4cfb4 100644
+--- a/Retrie/PatternMap/Instances.hs
++++ b/Retrie/PatternMap/Instances.hs
+@@ -13,6 +13,7 @@
+ {-# LANGUAGE TupleSections #-}
+ {-# LANGUAGE TypeFamilies #-}
+ {-# LANGUAGE ViewPatterns #-}
++{-# LANGUAGE LambdaCase #-}
+ -- NOTE: This was needed for GHC 9.4 due to
+ -- type Key RFMap = LocatedA (HsRecField GhcPS (LocatedA (HsExpr GhcPs)))
+ {-# LANGUAGE UndecidableInstances #-}
+@@ -658,7 +659,7 @@ instance PatternMap MMap where
+ 
+   mAlter :: AlphaEnv -> Quantifiers -> Key MMap -> A a -> MMap a -> MMap a
+   mAlter env vs match f (MMap m) =
+-    let lpats = m_pats match
++    let (L _ lpats) = m_pats match
+         pbs = collectPatsBinders CollNoDictBinders lpats
+         env' = foldr extendAlphaEnvInternal env pbs
+         vs' = vs `exceptQ` pbs
+@@ -668,7 +669,7 @@ instance PatternMap MMap where
+   mMatch :: MatchEnv -> Key MMap -> (Substitution, MMap a) -> [(Substitution, a)]
+   mMatch env match = mapFor unMMap >=> mMatch env lpats >=> mMatch env' (m_grhss match)
+     where
+-      lpats = m_pats match
++      (L _ lpats) = m_pats match
+       pbs = collectPatsBinders CollNoDictBinders lpats
+       env' = extendMatchEnv env pbs
+ 
+@@ -1003,7 +1004,7 @@ instance PatternMap LBMap where
+       go _ = const [] -- TODO
+ 
+ deValBinds :: HsValBinds GhcPs -> [HsBind GhcPs]
+-deValBinds (ValBinds _ lbs _) = map unLoc (bagToList lbs)
++deValBinds (ValBinds _ lbs _) = map unLoc lbs
+ deValBinds _ = error "deValBinds ValBindsOut"
+ 
+ ------------------------------------------------------------------------
+@@ -1124,7 +1125,6 @@ instance PatternMap SMap where
+       go ParStmt{} = missingSyntax "ParStmt"
+       go TransStmt{} = missingSyntax "TransStmt"
+       go RecStmt{} = missingSyntax "RecStmt"
+-      go ApplicativeStmt{} = missingSyntax "ApplicativeStmt"
+ 
+   mMatch :: MatchEnv -> Key SMap -> (Substitution, SMap a) -> [(Substitution, a)]
+   mMatch _   _   (_,SMEmpty) = []
+@@ -1274,25 +1274,14 @@ instance PatternMap TyMap where
+       go (HsTyVar _ _ v) = mapFor tyHsTyVar >=> mMatch env (unLoc v)
+       go _                  = const [] -- TODO
+ 
+-#if __GLASGOW_HASKELL__ < 900
+-extractBinderInfo :: LHsTyVarBndr GhcPs -> (RdrName, Maybe (LHsKind GhcPs))
+-extractBinderInfo = go . unLoc
+-  where
+-    go (UserTyVar _ v) = (unLoc v, Nothing)
+-    go (KindedTyVar _ v k) = (unLoc v, Just k)
+-    go XTyVarBndr{} = missingSyntax "XTyVarBndr"
+-#else
+ splitVisBinders :: HsForAllTelescope GhcPs -> (Bool, [(RdrName, Maybe (LHsKind GhcPs))])
+ splitVisBinders HsForAllVis{..} = (True, map extractBinderInfo hsf_vis_bndrs)
+ splitVisBinders HsForAllInvis{..} = (False, map extractBinderInfo hsf_invis_bndrs)
+ 
+ extractBinderInfo :: LHsTyVarBndr flag GhcPs -> (RdrName, Maybe (LHsKind GhcPs))
+-extractBinderInfo = go . unLoc
+-  where
+-    go (UserTyVar _ _ v) = (unLoc v, Nothing)
+-    go (KindedTyVar _ _ v k) = (unLoc v, Just k)
+-    go XTyVarBndr{} = missingSyntax "XTyVarBndr"
+-#endif
++extractBinderInfo v = case hsLTyVarLocName v of
++  Just v' -> (unLoc v', Nothing)
++  _ -> missingSyntax "idk"
+ 
+ ------------------------------------------------------------------------
+ 
+@@ -1340,13 +1329,6 @@ instance PatternMap RFMap where
+ class RecordFieldToRdrName f where
+   recordFieldToRdrName :: f -> RdrName
+ 
+-instance RecordFieldToRdrName (AmbiguousFieldOcc GhcPs) where
+-#if __GLASGOW_HASKELL__ < 908
+-  recordFieldToRdrName = rdrNameAmbiguousFieldOcc
+-#else
+-  recordFieldToRdrName = ambiguousFieldOccRdrName
+-#endif
+-
+ #if __GLASGOW_HASKELL__ < 904
+ instance RecordFieldToRdrName (FieldOcc p) where
+   recordFieldToRdrName = unLoc . rdrNameFieldOcc
+@@ -1395,25 +1377,16 @@ fieldsToRdrNamesUpd :: LHsRecUpdFields GhcPs
+ fieldsToRdrNamesUpd (RegularRecUpdFields _ xs) = map go xs
+   where
+     go (L l (HsFieldBind a (L l2 f) arg pun)) =
+-      let lrdrName = case f of
+-            Unambiguous _ n -> n
+-            Ambiguous _ n -> n
+-            XAmbiguousFieldOcc{} -> error "XAmbiguousFieldOcc"
++      let lrdrName = fieldOccLRdrName f
+           f' = FieldOcc NoExtField lrdrName
+        in L l (HsFieldBind a (L l2 f') arg pun)
+ fieldsToRdrNamesUpd (OverloadedRecUpdFields _ xs) = map go xs
+   where
+-#if __GLASGOW_HASKELL__ < 910
+-    go (L l (HsFieldBind a (L l2  _f) arg pun)) =
+-      let lrdrName = error "TBD" -- same as GHC 9.2
+-          f' = FieldOcc NoExtField lrdrName
+-       in L l (HsFieldBind a (L l2 f') arg pun)
+-#else
+-    go (L l (HsFieldBind a (L (EpAnn e _ c)  _f) arg pun)) =
++    go :: XRec GhcPs (HsFieldBind (LFieldLabelStrings GhcPs) (LHsExpr GhcPs)) -> LHsRecField GhcPs (LHsExpr GhcPs)
++    go (L l (HsFieldBind a (L l2 _f) arg pun)) =
+       let lrdrName = error "TBD" -- same as GHC 9.2
+           f' = FieldOcc NoExtField lrdrName
+-       in L l (HsFieldBind a (L (EpAnn e noAnn c) f') arg pun)
+-#endif
++       in L l (HsFieldBind a (L (l2l l2) f') arg pun)
+ #endif
+ 
+ #if __GLASGOW_HASKELL__ < 904
+diff --git a/Retrie/Rewrites/Function.hs b/Retrie/Rewrites/Function.hs
+index 48c39c5..81b49b7 100644
+--- a/Retrie/Rewrites/Function.hs
++++ b/Retrie/Rewrites/Function.hs
+@@ -69,7 +69,7 @@ matchToRewrites e imps dir (L _ alt') = do
+   -- let alt = alt'
+   -- lift $ debugPrint Loud "matchToRewrites:alt="  [showAst alt]
+   let
+-    pats = m_pats alt
++    pats = unLoc $ m_pats alt
+     grhss = m_grhss alt
+     grhss_loc = grhssLoc alt'
+   -- lift $ debugPrint Loud "matchToRewrites:alt'="  [showAst alt']
+@@ -133,7 +133,7 @@ makeFunctionQuery e imps dir grhss grhss_loc mkAppFn (argpats, bndpats)
+     lhs <- mkAppFn e es
+     for rhss $ \ grhs -> do
+       le <- mkLet lbs (grhsToExpr grhs)
+-      rhs <- mkLams bndpats le
++      rhs <- mkLams (L (l2l (getLoc grhs)) bndpats) le
+       let
+         (pat, pat_loc, temp) =
+           case dir of
+@@ -157,7 +157,7 @@ backtickRules
+ backtickRules e imps dir@LeftToRight grhss grhss_loc ps@[p1, p2] = do
+   let
+     both, left, right :: AppBuilder
+-    both op [l, r] = mkLocA (SameLine 1) (OpApp noAnn l op r)
++    both op [l, r] = mkLocA (SameLine 1) (OpApp NoExtField l op r)
+     both _ _ = fail "backtickRules - both: impossible!"
+ 
+     left op [l] = mkLocA (SameLine 1) (SectionL
+diff --git a/Retrie/Rewrites/Patterns.hs b/Retrie/Rewrites/Patterns.hs
+index a2127ec..ff2b0ec 100644
+--- a/Retrie/Rewrites/Patterns.hs
++++ b/Retrie/Rewrites/Patterns.hs
+@@ -114,7 +114,7 @@ asPat patName params = do
+     convertFields :: (Monad m) => [RecordPatSynField GhcPs]
+                       -> TransformT m (HsRecFields GhcPs (LPat GhcPs))
+     convertFields fields =
+-      HsRecFields <$> traverse convertField fields <*> pure Nothing
++      HsRecFields NoExtField <$> traverse convertField fields <*> pure Nothing
+ 
+     convertField :: (Monad m) => RecordPatSynField GhcPs
+                       -> TransformT m (LHsRecField GhcPs (LPat GhcPs))
+@@ -170,7 +170,9 @@ buildMatch
+   -> TransformT m [LMatch GhcPs (LHsExpr GhcPs)]
+ buildMatch names rhs = do
+   pats <- traverse mkVarPat names
++  l <- uniqueSrcSpanT
++  let lpats = L (EpaDelta l (SameLine 0) []) pats
+   let bs = collectPatBinders CollNoDictBinders rhs
+   (rhsExpr,(_,_bs')) <- runStateT (patToExpr rhs) (wildSupply bs, bs)
+-  let alt = mkMatch PatSyn pats rhsExpr emptyLocalBinds
++  let alt = mkMatch PatSyn lpats rhsExpr emptyLocalBinds
+   return [alt]
+diff --git a/Retrie/Subst.hs b/Retrie/Subst.hs
+index f66d137..af5fcc2 100644
+--- a/Retrie/Subst.hs
++++ b/Retrie/Subst.hs
+@@ -128,9 +128,9 @@ substHsMatchContext
+   -> HsMatchContext (LIdP GhcPs)
+   -> TransformT m (HsMatchContext (LIdP GhcPs))
+ #endif
+-substHsMatchContext ctxt (FunRhs (L l v) f s)
+-  | Just (HoleRdr rdr) <- lookupHoleVar v ctxt =
+-    return $ FunRhs (L l rdr) f s
++substHsMatchContext ctxt (FunRhs an@(L _ n) f s v)
++  | Just (HoleRdr rdr) <- lookupHoleVar n ctxt =
++    return $ FunRhs an f s v
+ substHsMatchContext _ other = return other
+ 
+ substBind
+diff --git a/hse/Fixity.hs b/hse/Fixity.hs
+index a59ac1a..b35858c 100644
+--- a/hse/Fixity.hs
++++ b/hse/Fixity.hs
+@@ -34,7 +34,7 @@ hseToGHC (HSE.Fixity assoc p nm) =
+ #if __GLASGOW_HASKELL__ < 908
+   (fs, (fs, Fixity (SourceText nm') p (dir assoc)))
+ #else
+-  (fs, (fs, Fixity (SourceText (fsLit nm')) p (dir assoc)))
++  (fs, (fs, Fixity p (dir assoc)))
+ #endif
+ 
+   where
+diff --git a/retrie.cabal b/retrie.cabal
+index 91255e3..08b9b6c 100644
+--- a/retrie.cabal
++++ b/retrie.cabal
+@@ -78,14 +78,14 @@ library
+   build-depends:
+     ansi-terminal >= 0.10.3 && < 1.1,
+     async >= 2.2.2 && < 2.3,
+-    base >= 4.11 && < 4.21,
++    base >= 4.11 && < 4.22,
+     bytestring >= 0.10.8 && < 0.13,
+     containers >= 0.5.11 && < 0.8,
+     data-default >= 0.7.1 && < 0.8,
+     directory >= 1.3.1 && < 1.4,
+     filepath >= 1.4.2 && < 1.6,
+-    ghc >= 9.2 && < 9.11,
+-    ghc-exactprint >= 1.5.0 && < 1.11,
++    ghc >= 9.2 && < 9.13,
++    ghc-exactprint >= 1.5.0 && < 1.13,
+     list-t >= 1.0.4 && < 1.1,
+     mtl >= 2.2.2 && < 2.4,
+     optparse-applicative >= 0.15.1 && < 0.19,

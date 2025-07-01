@@ -4,20 +4,25 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE MagicHash #-}
+{-# LANGUAGE PatternSynonyms #-}
 {-# LANGUAGE PolyKinds #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE UnboxedTuples #-}
+{-# LANGUAGE UndecidableInstances #-}
+{-# LANGUAGE ViewPatterns #-}
+{-# OPTIONS_GHC -Wno-incomplete-patterns #-}
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 
 module Sudoku.Cell where
 
 import Control.DeepSeq (NFData)
 import Control.Lens
-import Data.Aeson (FromJSON, ToJSON)
+import Data.Aeson (FromJSON, ToJSON (toEncoding))
+import Data.Aeson.Types (FromJSON (parseJSON), ToJSON (toJSON))
+-- import Data.Array.Accelerate (pattern Pattern)
 import Data.Bits (Bits ((.|.)), testBit, (!<<.), (!>>.))
-import Data.Data (Typeable)
 import Data.Foldable (fold)
 import Data.List (intersperse)
 import Data.Primitive (Prim (..))
@@ -30,6 +35,7 @@ import GHC.Word (Word16 (..))
 import TextShow (Builder, TextShow (..), toString)
 import TextShow.Data.Char (showbLitChar)
 
+-- import Data.Array.Accelerate qualified as A
 import Data.BitSet qualified as A.BS
 import Data.Vector.Generic qualified as VG
 import Data.Vector.Generic.Mutable qualified as VG
@@ -37,8 +43,18 @@ import Data.Vector.Primitive qualified as VP
 import Data.Vector.Unboxed qualified as VU
 import Data.Vector.Unboxed.Mutable qualified as MVU
 
+{-# ANN module ("HLint: ignore Use guards" :: String) #-}
+
 data Digit = One | Two | Three | Four | Five | Six | Seven | Eight | Nine
-    deriving (Enum, Ord, Eq, Generic, Bounded)
+    deriving (Ord, Eq, Generic)
+
+instance Enum Digit where
+    toEnum = intToDigit
+    fromEnum = digitToInt
+
+instance Bounded Digit where
+    minBound = One
+    maxBound = Nine
 
 -- | rather than convert back and forth through `Int`, just look up the enum values
 digitToWord16 :: Digit -> Word16
@@ -65,7 +81,31 @@ word16ToDigit = \case
     W16# 6#Word16 -> Seven
     W16# 7#Word16 -> Eight
     W16# 8#Word16 -> Nine
-    i -> error $ "invalid digit: " ++ show i
+
+-- | as for `digitToWord16`, lookup the digit for an enum value directly
+intToDigit :: Int -> Digit
+intToDigit = \case
+    0 -> One
+    1 -> Two
+    2 -> Three
+    3 -> Four
+    4 -> Five
+    5 -> Six
+    6 -> Seven
+    7 -> Eight
+    8 -> Nine
+
+digitToInt :: Digit -> Int
+digitToInt = \case
+    One -> 0
+    Two -> 1
+    Three -> 2
+    Four -> 3
+    Five -> 4
+    Six -> 5
+    Seven -> 6
+    Eight -> 7
+    Nine -> 8
 
 instance VP.Prim Digit where
     sizeOfType# _ = sizeOfType# (Proxy @Word16)
@@ -84,9 +124,12 @@ instance VU.IsoUnbox Digit Word16 where
 
 instance NFData Digit
 
-instance ToJSON Digit
+instance ToJSON Digit where
+    toEncoding d = toEncoding (fromEnum d)
+    toJSON d = toJSON (fromEnum d)
 
-instance FromJSON Digit
+instance FromJSON Digit where
+    parseJSON d = toEnum . (+ (-1)) <$> parseJSON d
 
 newtype instance VU.MVector s Digit = MV_Digit (VP.MVector s Digit)
 
@@ -108,12 +151,35 @@ bsfolded :: (Enum a, Bits b, Num b) => Fold (A.BS.BitSet b a) a
 bsfolded = folding A.BS.toList
 {-# INLINE bsfolded #-}
 
+type role CellSet phantom
+
 newtype CellSet a = CellSet {_bitSet :: A.BS.BitSet Word16 a}
     deriving (Generic)
-    deriving (Typeable, Semigroup, Monoid) via A.BS.BitSet Word16 a
+    deriving (Semigroup, Monoid) via A.BS.BitSet Word16 a
     deriving (Ord, Eq, VP.Prim) via Word16
 
+-- instance A.Elt (CellSet a)
+
+-- pattern CellSet_ :: (A.Elt (A.BS.BitSet Word16 a)) => A.Exp (A.BS.BitSet Word16 a) -> A.Exp (CellSet a)
+-- pattern CellSet_ bs = Pattern bs
+
+-- {-# COMPLETE CellSet_ #-}
+
+-- instance (A.Elt a, A.Elt (A.BS.BitSet Word16 a)) => A.Lift A.Exp (CellSet a) where
+--     type Plain (CellSet a) = CellSet a
+--     lift (CellSet bs) = CellSet_ (A.lift @A.Exp @(A.BS.BitSet Word16 a) bs)
+
 instance (NFData a) => NFData (CellSet a)
+
+newtype instance VU.MVector s (CellSet a) = MV_CellSet (VP.MVector s (CellSet a))
+
+newtype instance VU.Vector (CellSet a) = V_CellSet (VP.Vector (CellSet a))
+
+deriving via (VU.UnboxViaPrim (CellSet a)) instance VG.MVector MVU.MVector (CellSet a)
+
+deriving via (VU.UnboxViaPrim (CellSet a)) instance VG.Vector VU.Vector (CellSet a)
+
+instance VU.Unbox (CellSet a)
 
 instance (Enum a, TextShow a) => TextShow (CellSet a) where
     showb (CellSet ps) =
@@ -135,9 +201,26 @@ instance (Enum a, TextShow a) => Show (CellSet a) where
 data Cell a
     = KnownRepr {-# UNPACK #-} !Word16
     | Possibly {-# UNPACK #-} !(CellSet a)
-    deriving (Typeable, Generic, Ord, Eq)
+    deriving (Generic, Ord, Eq)
+
+pattern Known :: (Enum a, VU.IsoUnbox a Word16) => a -> Cell a
+pattern Known d <- KnownRepr (Just . fromURepr -> Just d)
+    where
+        Known d = KnownRepr (toURepr d)
 
 instance (NFData a) => NFData (Cell a)
+
+-- instance A.Elt (Cell a)
+
+-- A.mkPattern ''Cell
+
+isKnown :: forall a. Cell a -> Bool
+isKnown c =
+    let w = cellToWord16 c
+    in testBit w 0
+
+isPossibly :: forall a. Cell a -> Bool
+isPossibly = not . isKnown
 
 cellToWord16 :: Cell a -> Word16
 cellToWord16 (KnownRepr w) = (w !<<. 1) .|. 0b1
@@ -178,35 +261,57 @@ instance (TextShow a, Enum a, VU.IsoUnbox a Word16) => Show (Cell a) where
 
 type CellPos = (Word8, Word8, Word8)
 
-mkCell :: (Enum a) => Cell a
-mkCell = Possibly (CellSet (A.BS.fromList [toEnum 0 ..]))
+mkCell :: (Enum a, Bounded a) => Cell a
+mkCell = Possibly (CellSet (A.BS.fromList [minBound .. maxBound]))
 
 mkKnown :: (VU.IsoUnbox a Word16) => a -> Cell a
 mkKnown = KnownRepr . toURepr
 
 boxNumber :: Word8 -> Word8 -> Word8
-boxNumber r c = fromIntegral $ (r - 1) `div` 3 * 3 + (c - 1) `div` 3 + 1
+boxNumber !r !c = (r - 1) `div` 3 * 3 + (c - 1) `div` 3 + 1
+
+-- box number and box idx are used as array indices so they need to count from 0
+-- boxNumber_ :: (Integral (A.Exp a), A.Elt a) => A.Exp (a, a) -> A.Exp a
+-- boxNumber_ (A.T2 r c) = r `div` 3 * 3 + c `div` 3
+
+-- -- box number and box idx are used as array indices so they need to count from 0
+-- boxIndex_ :: (Integral (A.Exp a), A.Elt a) => A.Exp (a, a, a) -> A.Exp a
+-- boxIndex_ (A.T3 r c _) = r `A.rem` 3 * 3 + c `rem` 3
 
 rowColumn :: Int -> CellPos
-rowColumn i = (r, c, b)
+rowColumn !i = (r, c, b)
   where
-    r = fromIntegral $ i `div` 9 + 1
-    c = fromIntegral $ i `rem` 9 + 1
-    b = boxNumber r c
+    !r = fromIntegral $ i `div` 9 + 1
+    !c = fromIntegral $ i `rem` 9 + 1
+    !b = boxNumber r c
+
+-- rowColumn_ :: A.Exp Int -> A.Exp CellPos
+-- rowColumn_ i = A.T3 r c b
+--   where
+--     r = A.fromIntegral $ i `A.div` 9 A.+ 1
+--     c = A.fromIntegral $ i `A.rem` 9 A.+ 1
+--     b = boxNumber_ (A.T2 (r - 1) (c - 1)) + 1
 
 vindex :: CellPos -> Int
-vindex (r, c, _) = fromIntegral $ (r - 1) * 9 + c - 1
+vindex (!r, !c, _) = fromIntegral $! (r - 1) * 9 + c - 1
+
+-- vindex_ :: A.Exp CellPos -> A.Exp Int
+-- vindex_ = A.match \case
+--     (A.T3 r c _) -> A.fromIntegral $ (r - 1) * 9 + c - 1
 
 cellIndex :: Iso' Int CellPos
 cellIndex = iso rowColumn vindex
 {-# INLINE cellIndex #-}
+
+-- cellIndex_ :: Iso' (A.Exp Int) (A.Exp CellPos)
+-- cellIndex_ = iso rowColumn_ vindex_
 
 cellPos :: (VU.Unbox a, VU.Unbox b) => IndexedTraversal CellPos (VU.Vector a) (VU.Vector b) a b
 cellPos = reindexed (view cellIndex) vectorTraverse
 {-# INLINE cellPos #-}
 
 boxIndex :: CellPos -> Word8
-boxIndex (r, c, _) = (r - 1) `rem` 3 * 3 + (c - 1) `rem` 3 + 1
+boxIndex (!r, !c, _) = (r - 1) `rem` 3 * 3 + (c - 1) `rem` 3 + 1
 
 withBoxIndex :: Iso' CellPos (Word8, Word8, Word8, Word8)
 withBoxIndex = iso (\(r, c, b) -> (r, c, b, boxIndex (r, c, b))) (\(r, c, b, _) -> (r, c, b))
@@ -217,10 +322,53 @@ boxIndexing =
         (\loc@(_, _, b) -> (b, boxIndex loc))
         (\(b, offset) -> ((b - 1) `div` 3 * 3 + (offset - 1) `div` 3 + 1, ((b - 1) `rem` 3) * 3 + (offset - 1) `rem` 3 + 1, b))
 
+-- boxIndexing_ :: Iso' (A.Exp CellPos) (A.Exp (Word8, Word8))
+-- boxIndexing_ =
+--     iso
+--         ( A.match
+--             \case
+--                 loc@(A.T3 _ _ b) -> A.T2 (b - 1) (boxIndex_ loc)
+--         )
+--         ( A.match \case
+--             (A.T2 b offset) -> A.T3 ((b - 1) `div` 3 * 3 + (offset - 1) `div` 3 + 1) (((b - 1) `rem` 3) * 3 + (offset - 1) `rem` 3 + 1) b
+--         )
+
+data RegionIndicator = Row | Column | Box deriving (Eq, Ord, Generic, Enum)
+
+-- instance A.Elt RegionIndicator
+
+-- A.mkPattern ''RegionIndicator
+
+instance TextShow RegionIndicator where
+    showb Row = "Row"
+    showb Column = "Column"
+    showb Box = "Box"
+
+instance Show RegionIndicator where
+    show = toString . showb
+
+majorMinor :: RegionIndicator -> CellPos -> (RegionIndicator, Int, Int)
+majorMinor Row (!r, !c, _) = (Row, fromIntegral r, fromIntegral c)
+majorMinor Column (!r, !c, _) = (Column, fromIntegral c, fromIntegral r)
+majorMinor Box loc@(_, _, !b) = (Box, fromIntegral b, fromIntegral (boxIndex loc))
+
+fromMajorMinor :: (RegionIndicator, Int, Int) -> (RegionIndicator, CellPos)
+fromMajorMinor (Row, !row, !col) = (Row, (fromIntegral row, fromIntegral col, boxNumber (fromIntegral row) (fromIntegral col)))
+fromMajorMinor (Column, !col, !row) = (Column, (fromIntegral row, fromIntegral col, boxNumber (fromIntegral row) (fromIntegral col)))
+fromMajorMinor (Box, !box, !boxIdx) = (Box, (fromIntegral box, fromIntegral boxIdx) ^. re boxIndexing)
+
+_majorMinor :: Iso' (RegionIndicator, CellPos) (RegionIndicator, Int, Int)
+_majorMinor = iso (uncurry majorMinor) fromMajorMinor
+
 makeLenses ''CellSet
 makePrisms ''CellSet
 makeLenses ''A.BS.BitSet
 makePrisms ''A.BS.BitSet
+
+-- instance (A.Elt a) => A.Lift A.Exp (Cell a) where
+--     type Plain (Cell a) = Cell a
+--     lift (KnownRepr w) = KnownRepr_ (A.lift w)
+--     lift (Possibly cs) = Possibly_ (A.lift cs)
 
 _Known :: forall a. (IsoUnbox a Word16) => Prism' (Cell a) a
 _Known =

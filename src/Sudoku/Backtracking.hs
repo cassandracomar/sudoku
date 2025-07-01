@@ -1,15 +1,18 @@
 {-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE TypeFamilies #-}
 
 module Sudoku.Backtracking where
 
-import Control.Applicative (Alternative (empty))
+import Control.Applicative (Alternative (..))
+import Control.Category ((>>>))
 import Control.Lens
 import Control.Monad (join)
 import Control.Monad.LogicState (LogicStateT, MonadLogic (interleave, lnot, (>>-)), MonadLogicState (backtrack))
 import Control.Monad.RWS.Lazy (MonadState, MonadWriter (tell))
-import Control.Monad.Reader (ReaderT)
+import Control.Monad.Reader (ReaderT (runReaderT))
 import Control.Monad.Trans (lift)
-import Control.Monad.Trans.Writer.Lazy (WriterT)
+import Control.Monad.Trans.Writer.Lazy (WriterT (runWriterT))
+import Control.Monad.TransLogicState.Class (observeT)
 import Data.List (sortBy)
 import Data.Monoid (Sum (Sum))
 import Data.Word (Word16)
@@ -19,6 +22,7 @@ import Sudoku.Grid
 import Data.BitSet qualified as A.BS
 import Data.Set qualified as S
 import Data.Vector.Unboxed qualified as VU
+import Sudoku.Summaries ((>>>>))
 
 type Contradicted a = A.BS.BitSet Word16 a
 
@@ -29,6 +33,15 @@ type Sudoku a r = SudokuT (ReaderT SolverOptions (WriterT (BacktrackStateLog a) 
 data BacktrackState a = BacktrackState {_bs :: !(Grid a), _location :: !CellPos, _contradicted :: !a}
 
 type BacktrackStateLog a = [BacktrackState a]
+
+{- | strip the monad wrappers to yield back the base monad. takes the options used to run the solver and the initial grid as `Reader`
+arguments.
+-}
+runSudokuT ::
+    forall a m.
+    (Monad m, MonadFail m) =>
+    SolverOptions -> Grid a -> SudokuT (ReaderT SolverOptions (WriterT (BacktrackStateLog a) m)) a (Grid a) -> m (Grid a)
+runSudokuT opts = (A.BS.empty @Word16 @a,) >>> observeT >>>> flip runReaderT opts >>> runWriterT >>> fmap fst
 
 makeLenses ''BacktrackState
 
@@ -70,15 +83,11 @@ findRestrictedCells g =
     restrictionOrdering a b = restrictionScore g a `compare` restrictionScore g b
 {-# INLINE findRestrictedCells #-}
 
-ixCell :: (VU.Unbox (Cell a), Enum a) => CellPos -> IndexedTraversal' CellPos (Grid a) (Cell a)
-ixCell loc = grid . cellPos . index loc
-{-# INLINE ixCell #-}
-
 choosePossible ::
     (Alternative m, MonadLogic m, MonadState (s, Grid a) m, VU.Unbox (Cell a), Enum a, VU.IsoUnbox a Word16) =>
     CellPos -> m (Cell a)
 choosePossible loc =
-    use (_2 . singular (ixCell loc))
+    use (_2 . singular (ix loc))
         >>= foldrOf (_Possibly . _CellSet . bsfolded) (view (re _Known . to pure . to interleave)) empty
 {-# SPECIALIZE INLINE choosePossible :: CellPos -> Sudoku Digit (Cell Digit) #-}
 
@@ -96,12 +105,12 @@ attemptToContradict ::
     (SudokuT m a (Grid a) -> SudokuT m a (Grid a)) -> CellPos -> SudokuT m a ()
 attemptToContradict act loc =
     choosePossible loc >>- \cell -> join . backtrack $ do
-        _2 . ixCell loc .= cell
+        _2 . ix loc .= cell
         g <- use _2
-        lnot . act $ return g
+        lnot $ act (return g)
         _1 %= A.BS.insert (d cell)
         lift $ tell [BacktrackState g loc (d cell)]
-        _2 . ixCell loc . _Possibly . _CellSet %= A.BS.delete (d cell)
+        _2 . ix loc . _Possibly . _CellSet %= A.BS.delete (d cell)
   where
     d cell = cell ^. singular _Known
 {-# SPECIALIZE INLINE attemptToContradict ::

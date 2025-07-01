@@ -1,31 +1,23 @@
-{-# LANGUAGE UndecidableInstances #-}
-
 module Sudoku.Solver where
 
-import Control.Applicative (Alternative (..))
-import Control.Arrow ((>>>))
+import Control.Applicative (Alternative (..), (<**>))
 import Control.Lens
 import Control.Monad (foldM, guard, unless, when)
 import Control.Monad.Fix (fix)
-import Control.Monad.LogicState (TransLogicState (observeT))
 import Control.Monad.RWS.Lazy (MonadState (put))
-import Control.Monad.Trans.Reader (runReaderT)
-import Control.Monad.Trans.Writer.Lazy (runWriterT)
 import Data.Aeson (eitherDecodeStrict')
 import Data.Maybe (fromMaybe)
-import Data.Text.Lazy (Text)
 import Data.Word (Word16)
-import Sudoku.Backtracking (Contradicted, Sudoku, attemptToContradict, findRestrictedCells, ixCell)
-import Sudoku.Cell (Cell, CellPos, Digit, showLocB, _CellSet, _Possibly)
+import Sudoku.Backtracking (Contradicted, Sudoku, attemptToContradict, findRestrictedCells, runSudokuT)
+import Sudoku.Cell
 import Sudoku.Grid
 import Sudoku.Simplifiers
-import Sudoku.Summaries (checkSolved, solved, summaryOf)
-import TextShow (TextShow (showbList), toLazyText)
+import Sudoku.Summaries (checkSolved, ixSolved, summaryOf, (>>>>))
+import TextShow as TB (Builder, TextShow (showb, showbList), toLazyText, unlinesB)
 
 import Data.BitSet qualified as A.BS
 import Data.ByteString qualified as BS
 import Data.Set qualified as S
-import Data.Text.Lazy qualified as T
 import Data.Vector.Unboxed qualified as VU
 
 type SolverConstraints a = (Show a, Ord a, Enum a, VU.Unbox a, VU.Unbox (Cell a))
@@ -33,24 +25,26 @@ type SolverConstraints a = (Show a, Ord a, Enum a, VU.Unbox a, VU.Unbox (Cell a)
 printStep :: (SolverMonad m) => Simplify s a -> s a -> SimplifierResult s a -> m ()
 printStep (Simplify f _) = printStepImpl f
 
-printContradictions :: (SolverMonad m) => [Text] -> m ()
-printContradictions contras = printChecked $ T.intercalate "\n" ("Found Contradictions: " : contras)
+-- printStep (AccSimplifier f _) = printStepImpl f
+
+printContradictions :: (SolverMonad m) => [TB.Builder] -> m ()
+printContradictions contras = printVerbose . toLazyText $ unlinesB ("Found Contradictions: " : contras)
 
 runSimplifierOnce :: forall m. (SolverMonad m) => Simplify Grid Digit -> Grid Digit -> m (Grid Digit)
 runSimplifierOnce f g =
     ensure (const solveCheck) g <|> ensure (== g) g' <|> do
-        let contras = res ^. contradictionsExplained
         when (null contras) $ printStep f g res
-        unless (null contras) $ printContradictions contras
+        unless (null contras) . printContradictions . fmap showb $ contras
         guard (null contras)
         return g'
   where
     res = runSimplifierPure f g
-    solveCheck = fromMaybe False $ res ^? isSolved
-    g' = res ^. simplifierOutput
+    contras = res ^. contradictionDescs
+    solveCheck = fromMaybe False $ res ^? isSolvedRes
+    g' = res ^. simplifierOutput & isSolved .~ solveCheck
 
 solverCheckGridSolved :: Grid Digit -> Bool
-solverCheckGridSolved g = checkSolved . summaryOf (g ^. grid) . curry $ foldOf (_2 . solved)
+solverCheckGridSolved = checkSolved . summaryOf ixSolved
 
 runSimplifier :: forall m. (SolverMonad m) => Simplify Grid Digit -> m (Grid Digit) -> m (Grid Digit)
 runSimplifier f = fix $ \rec mg -> do
@@ -69,7 +63,7 @@ runCheapSimplifiers = fix $ \rec mg -> do
     ensure (== g) g' <|> rec (return g')
 
 runExpensiveSimplifier :: forall m. (SolverMonad m) => Simplify Grid Digit -> Grid Digit -> m (Grid Digit)
-runExpensiveSimplifier f g = runSimplifierOnce f g & runCheapSimplifiers
+runExpensiveSimplifier = runSimplifierOnce >>>> runCheapSimplifiers
 
 -- | run each expensive strategy in sequence, interleaving strategies that should be run in between every pair of steps.
 runExpensiveSimplifiers :: forall m. (SolverMonad m) => m (Grid Digit) -> m (Grid Digit)
@@ -117,33 +111,32 @@ trying all of the aforementioned strategies recursively just to eliminate a sing
 runBasicSolver :: (SolverMonad m) => Grid Digit -> m (Grid Digit)
 runBasicSolver g = do
     g' <- runCheapSimplifiers (return g)
-    ensure solverCheckGridSolved g' <|> ensure (== g) g' <|> runExpensiveSimplifiers (return g')
+    ensure (== g) g' <|> runExpensiveSimplifiers (return g')
 
-printNotice :: (SolverMonad m) => [Text] -> m ()
-printNotice ss = printChecked $ T.unlines report
+printNotice :: (SolverMonad m) => [Builder] -> m ()
+printNotice ss = printVerbose . toLazyText $ unlinesB report
   where
-    reportHeader = [toLazyText dashRow, "NOTICE:"]
-    reportFooter = [toLazyText dashRow]
+    reportHeader = [dashRow, "NOTICE:"]
+    reportFooter = [dashRow]
     report = reportHeader <> ss <> reportFooter
 
 printNoticeStart :: (SolverMonad m) => CellPos -> m ()
 printNoticeStart loc =
     printNotice
-        [ toLazyText $ "using the backtracking solver to search for impossible values in " <> showLocB loc
+        [ "using the backtracking solver to search for impossible values in " <> showLocB loc
         , "another attempt to solve logically will be made after we've eliminated impossibilities from this cell."
         ]
 
 printNoticeEnd :: (SolverMonad m, TextShow a, Enum a) => CellPos -> Contradicted a -> m ()
 printNoticeEnd loc cs =
     printNotice
-        [ toLazyText $
-            "resuming logical solving with the knowledge that " <> showLocB loc <> " cannot be " <> showbList (A.BS.toList cs)
+        [ "resuming logical solving with the knowledge that " <> showLocB loc <> " cannot be " <> showbList (A.BS.toList cs)
         ]
 
 reportSolved :: (SolverMonad m) => Grid Digit -> m ()
-reportSolved g = when (solverCheckGridSolved g) (printUnchecked . T.unlines $ report)
+reportSolved g = when (solverCheckGridSolved g) (printQuiet . toLazyText . unlinesB $ report)
   where
-    report = [toLazyText dashRow, "Step: Solved!", "Final Grid:", textShow g]
+    report = [dashRow, "Step: Solved!", "Final Grid:", showb g]
 
 {- | use the basic solver until it fails to make progress, then try to prove what values cells cannot take. this uses
 backtracking to find contradictions. this solver may actually solve the puzzle while looking for contradictions.
@@ -186,7 +179,7 @@ runBacktrackingSolver mg = do
         reportSolved g'
         ensure solverCheckGridSolved g' <|> ensure (== g) g' <|> runBacktrackingSolver (return g')
   where
-    removePoss loc cs = ixCell loc . _Possibly . _CellSet %~ (A.BS.\\ cs)
+    removePoss loc cs = ix loc . _Possibly . _CellSet %~ (A.BS.\\ cs)
     addContra loc = contradictionSearched %~ S.insert loc
     applyUpdates loc cs = removePoss loc cs . addContra loc
     -- worker that first tries to find contradictions in a `Cell`, then reruns the basic solver after updating the grid to remove
@@ -202,17 +195,14 @@ runBacktrackingSolver mg = do
         ensure solverCheckGridSolved g'' <|> go locs g''
     go [] g = return g
 
+runBacktrackingSolver' :: Grid Digit -> Sudoku Digit (Grid Digit)
+runBacktrackingSolver' = runBacktrackingSolver . pure
+
+displayStartNotice :: Grid Digit -> Sudoku Digit ()
+displayStartNotice = printQuiet . toLazyText . unlinesB . report
+  where
+    report g = [dashRow, "Step: Initial", "Starting Grid:", showb g]
+
 -- | interface to the solver: run the backtracking solver and strip away the intervening monads such that we're left with an IO action.
 runSolver :: SolverOptions -> Grid Digit -> IO (Grid Digit)
-runSolver opts g =
-    initialize
-        >>> runBacktrackingSolver
-        >>> observeT (A.BS.empty @Word16 @Digit, g)
-        >>> flip runReaderT opts
-        >>> runWriterT
-        >>> fmap fst
-        $ g
-  where
-    report g' = [toLazyText dashRow, "Step: Initial", "Starting Grid:", textShow g']
-    startNotice g' = printUnchecked $ T.unlines (report g')
-    initialize g' = startNotice g' >> return g'
+runSolver opts = (*>) <$> displayStartNotice <*> runBacktrackingSolver' <**> runSudokuT opts

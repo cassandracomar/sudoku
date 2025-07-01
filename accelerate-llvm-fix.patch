@@ -1,3 +1,31 @@
+diff --git a/accelerate-llvm-native/Setup.hs b/accelerate-llvm-native/Setup.hs
+index 8a201c24..3f666f80 100644
+--- a/accelerate-llvm-native/Setup.hs
++++ b/accelerate-llvm-native/Setup.hs
+@@ -11,6 +11,7 @@ import Distribution.Simple.PackageIndex
+ import Distribution.Simple.Setup                                    as Setup
+ import Distribution.Verbosity
+ import qualified Distribution.InstalledPackageInfo                  as Installed
++import Distribution.Utils.Path (makeSymbolicPath)
+ 
+ #if MIN_VERSION_Cabal(3,8,0)
+ import Distribution.Simple.PackageDescription
+@@ -31,12 +32,12 @@ main = defaultMainWithHooks simpleUserHooks
+   , preInst     = readHook installVerbosity
+   , preHscolour = readHook hscolourVerbosity
+   , preHaddock  = readHook haddockVerbosity
+-  , preReg      = readHook regVerbosity
+-  , preUnreg    = readHook regVerbosity
++  , preReg      = readHook (setupVerbosity . registerCommonFlags)
++  , preUnreg    = readHook (setupVerbosity . registerCommonFlags)
+   }
+   where
+     readHook :: (a -> Setup.Flag Verbosity) -> Args -> a -> IO HookedBuildInfo
+-    readHook verbosity _ flags = readHookedBuildInfo (fromFlag (verbosity flags)) buildinfo_file
++    readHook verbosity _ flags = readHookedBuildInfo (fromFlag (verbosity flags)) Nothing (makeSymbolicPath buildinfo_file)
+ 
+     postConfHook :: Args -> ConfigFlags -> PackageDescription -> LocalBuildInfo -> IO ()
+     postConfHook args flags pkg_desc lbi = do
 diff --git a/accelerate-llvm-native/accelerate-llvm-native.cabal b/accelerate-llvm-native/accelerate-llvm-native.cabal
 index 0b173089..40a4bcc8 100644
 --- a/accelerate-llvm-native/accelerate-llvm-native.cabal
@@ -22,6 +50,20 @@ index 0b173089..40a4bcc8 100644
          , lockfree-queue                >= 0.2
          , mtl                           >= 2.2.1
            -- TODO: These are only used for lifting ByteStrings. bytestring
+diff --git a/accelerate-llvm-native/src/Data/Array/Accelerate/LLVM/Native/Compile.hs b/accelerate-llvm-native/src/Data/Array/Accelerate/LLVM/Native/Compile.hs
+index dc6e055c..547dcbc7 100644
+--- a/accelerate-llvm-native/src/Data/Array/Accelerate/LLVM/Native/Compile.hs
++++ b/accelerate-llvm-native/src/Data/Array/Accelerate/LLVM/Native/Compile.hs
+@@ -175,8 +175,7 @@ compile pacc aenv = do
+ -- this will do the right thing, whereas 'ld --shared' will not.
+ --
+ ld :: FilePath
+-ld = unsafePerformIO
+-   $ fromMaybe "cc" <$> liftA2 (<|>) (lookupEnv "LD") (lookupEnv "CC")
++ld = "ld"
+ 
+ -- The file extension for static libraries
+ --
 diff --git a/accelerate-llvm-native/src/Data/Array/Accelerate/LLVM/Native/Plugin.hs b/accelerate-llvm-native/src/Data/Array/Accelerate/LLVM/Native/Plugin.hs
 index 435a5e0d..3241409f 100644
 --- a/accelerate-llvm-native/src/Data/Array/Accelerate/LLVM/Native/Plugin.hs

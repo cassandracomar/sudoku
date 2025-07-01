@@ -1,24 +1,38 @@
+{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE PatternSynonyms #-}
+{-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE UndecidableInstances #-}
+{-# LANGUAGE ViewPatterns #-}
+
 module Data.WordMap where
 
-import Data.Vector.Unboxed qualified as VU
+import Control.Lens
+import Control.Lens (Index)
+import Data.Array.Accelerate as A
+import Data.Array.Accelerate.Control.Lens (At (..), Ixed, liftLens)
+import Data.Array.Accelerate.Data.HashMap (Hashable (..))
+import Data.Array.Accelerate.Data.Hashable (Hashable (..))
+import Data.Array.Accelerate.LLVM.Native (run)
+import Data.Monoid (Sum (Sum))
+import Sudoku.Grid (RegionIndicator)
 
-newtype WordMap k v = WordMap {runWordMap :: VU.Vector v}
+import Prelude qualified as P hiding (Eq, Integral)
 
-type role WordMap nominal nominal
+type WordMap sh v = Array sh v
 
-extend :: (VU.Unbox v, Monoid v) => VU.Vector v -> VU.Vector v -> VU.Vector v
-extend m m' =
-    if VU.length m < VU.length m'
-        then m VU.++ VU.replicate (VU.length m' - VU.length m) mempty
-        else m
+lookup :: (Shape sh, P.Monoid v, Elt v) => Exp sh -> Acc (WordMap sh v) -> Exp v
+lookup k vs = vs ! k
 
-instance (Monoid v, VU.Unbox v) => Semigroup (WordMap k v) where
-    (WordMap m) <> (WordMap m') = WordMap $ VU.zipWith (<>) (extend m m') (extend m' m)
+-- | `mappend` `v` to the elements at each `k` in `ks`
+insert :: (Shape sh, P.Monoid v, Elt v) => Acc (A.Vector sh) -> Exp v -> Acc (WordMap sh v) -> Acc (WordMap sh v)
+insert ks v vs = undefined
 
-instance (VU.Unbox v, Monoid v) => Monoid (WordMap k v) where
-    mempty = WordMap VU.empty
-
-insert :: (Integral k, VU.Unbox v, Monoid v) => k -> v -> WordMap k v -> WordMap k v
-insert k v (WordMap w)
-    | fromIntegral k < VU.length w = WordMap $ w VU.// [(fromIntegral k, v)]
-    | otherwise = insert k v . WordMap $ w VU.++ VU.replicate (VU.length w) mempty
+test :: Array (Z :. Int) (Sum Int)
+test = run (A.fold (P.<>) 0 mat)
+  where
+    vec :: Acc (Array (Z :. Int) (Sum Int))
+    vec = A.use (A.fromList (Z :. 5) (P.map Sum [1 ..]))
+    mat :: Acc (Array (Z :. Int :. Int) (Sum Int))
+    mat = A.replicate (constant $ Z :. (3 :: Int) :. All) vec

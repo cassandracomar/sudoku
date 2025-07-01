@@ -1,6 +1,9 @@
 {-# LANGUAGE MonadComprehensions #-}
+{-# LANGUAGE PatternSynonyms #-}
 {-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE UndecidableInstances #-}
+{-# LANGUAGE ViewPatterns #-}
 
 module Sudoku.Grid where
 
@@ -27,6 +30,7 @@ import TextShow (Builder, TextShow (showb), toLazyText, toString, unlinesB)
 import TextShow.Data.Char (showbLitChar)
 import TextShow.Data.List (showbListWith)
 
+-- import Data.Array.Accelerate qualified as A
 import Data.BitSet qualified as A.BS
 import Data.List qualified as L
 import Data.Set qualified as S
@@ -51,18 +55,19 @@ instance Default SolverOptions where
 
 makeLenses ''SolverOptions
 
--- | the name lies slightly -- when running an automated test, we don't want any logging.
--- so silence logging in that case but otherwise output the log message, whether verbose logging
--- is enabled or not.
-printUnchecked :: (SolverMonad m) => Text -> m ()
-printUnchecked = guarded (view testNoLog <&> not) . (liftIO . T.putStrLn)
+{- | the name lies slightly -- when running an automated test, we don't want any logging.
+so silence logging in that case but otherwise output the log message, whether verbose logging
+is enabled or not.
+-}
+printQuiet :: (SolverMonad m) => Text -> m ()
+printQuiet = guarded (view testNoLog <&> not) . (liftIO . T.putStrLn)
 
 checkVerbosity :: (SolverMonad m) => m Bool
 checkVerbosity = view verbose
 {-# INLINE checkVerbosity #-}
 
-printChecked :: (SolverMonad m) => Text -> m ()
-printChecked t = guarded checkVerbosity (printUnchecked t)
+printVerbose :: (SolverMonad m) => Text -> m ()
+printVerbose t = guarded checkVerbosity (printQuiet t)
 
 type RowIx = Word8
 
@@ -180,6 +185,7 @@ data Grid a = Grid
     , _rules :: !Rules
     , _knownTuples :: !(S.Set (CommonPossibilities a))
     , _contradictionSearched :: !(S.Set CellPos)
+    , _isSolved :: !Bool
     }
     deriving (Generic)
 
@@ -189,15 +195,12 @@ deriving instance (Eq a, VU.Unbox (Cell a)) => Eq (Grid a)
 
 instance (NFData a) => NFData (Grid a)
 
-data RegionIndicator = Row | Column | Box deriving (Eq, Ord)
+data ByLoc a = ByLoc {v :: a, regionNumber :: Int, region :: RegionIndicator}
+    deriving (Generic)
 
-instance TextShow RegionIndicator where
-    showb Row = "Row"
-    showb Column = "Column"
-    showb Box = "Box"
+-- instance (A.Elt a) => A.Elt (ByLoc a)
 
-instance Show RegionIndicator where
-    show = toString . showb
+-- A.mkPattern ''ByLoc
 
 allIndices :: VU.Vector CellPos
 allIndices = VU.imap (\i _ -> i ^. cellIndex) (VU.replicate 81 ())
@@ -211,8 +214,8 @@ chunksOf :: Int -> [a] -> [[a]]
 chunksOf _ [] = []
 chunksOf n l = take n l : chunksOf n (drop n l)
 
-instance (VU.Unbox (Cell a), Ord a, Enum a) => Default (Grid a) where
-    def = Grid (VU.replicate 81 mkCell) (Rules []) mempty S.empty
+instance (VU.Unbox (Cell a), Ord a, Enum a, Bounded a) => Default (Grid a) where
+    def = Grid (VU.replicate 81 mkCell) (Rules []) mempty S.empty False
 
 rowAt :: (VU.Unbox (Cell a)) => Word8 -> SudokuSetTraversal a
 rowAt r =
@@ -307,10 +310,10 @@ showRows :: (TextShow a, Enum a, VU.IsoUnbox a Word16) => Grid a -> [Builder]
 showRows g = dashRow : addBoxes Row (intersperse underlineRow ([1 .. 9] <&> showRow g)) <> [dashRow]
 
 instance (TextShow a, Enum a, VU.IsoUnbox a Word16) => TextShow (Grid a) where
-    showb g = unlinesB $ showRows g <> ("" : kts)
+    showb g = unlinesB $ showRows g <> kts
       where
         kts = case lengthOf (knownTuples . folded) g > 0 of
-            True -> "Known Tuples:" : toListOf (knownTuples . folded . to showb) g
+            True -> "" : "Known Tuples:" : toListOf (knownTuples . folded . to showb) g
             False -> []
     {-# SPECIALIZE showb :: Grid Digit -> Builder #-}
 
@@ -320,7 +323,16 @@ instance (TextShow a, Enum a, VU.IsoUnbox a Word16) => Show (Grid a) where
 type SudokuSetTraversal a = ReifiedIndexedTraversal' CellPos (Grid a) (Cell a)
 
 mkGrid :: Rules -> Grid Digit
-mkGrid givenRules = Grid{_grid = mkBoard, _rules = givenRules, _knownTuples = S.empty, _contradictionSearched = S.empty}
+mkGrid givenRules =
+    Grid{_grid = mkBoard, _rules = givenRules, _knownTuples = S.empty, _contradictionSearched = S.empty, _isSolved = False}
   where
     givenDigits = (givenRules ^.. constraints . traversed . _Given) <&> ((_2 %~ view (re _Known)) . (_1 %~ vindex))
     mkBoard = VU.replicate 81 mkCell VU.// givenDigits
+
+type instance IxValue (Grid a) = Cell a
+
+type instance Index (Grid a) = CellPos
+
+instance Ixed (Grid a) where
+    ix loc = grid . cellPos . index loc
+    {-# INLINE ix #-}
