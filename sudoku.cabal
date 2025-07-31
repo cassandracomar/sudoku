@@ -78,14 +78,20 @@ library
                     -- , Sudoku.Accelerate.Run
                     -- , Sudoku.Accelerate.Cell
     other-modules:    Data.BitSet
-                    -- , Data.Accelerate.BitSet
-                    -- , Data.WordMap
-                    -- , Data.Map.Monoidal
 
     -- LANGUAGE extensions used by modules in this package.
     default-extensions:   OverloadedLabels
                         , OverloadedStrings
                         , BlockArguments
+                        , TypeFamilies
+                        , TypeFamilyDependencies
+                        , TemplateHaskell
+                        , AllowAmbiguousTypes
+                        , NoMonoLocalBinds
+                        , NoMonomorphismRestriction
+                        , FunctionalDependencies
+                        , DefaultSignatures
+                        , DerivingVia
 
     -- Other library packages from which modules are imported.
     build-depends:    base >=4.20.0.0
@@ -94,7 +100,7 @@ library
                     , transformers
                     , mtl
                     , array
-                    , containers
+                    , containers == 0.8
                     , aeson
                     , bytestring
                     , loop

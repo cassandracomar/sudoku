@@ -122,7 +122,7 @@ calculateNewTuplesAcross sel ri = foldMapOf (riToLens ri . byRegion . folded . s
 
 applyPartitions ::
     forall s a.
-    (VU.Unbox (Cell a), Enum a, Eq a, Ord a, Show a) =>
+    (VU.Unbox a, Enum a, Eq a, Ord a, Show a) =>
     Lens' s [CommonPossibilities a] -> Lens' (Grid a) (VU.Vector (Cell a)) -> RegionSummaries s -> Grid a -> Grid a
 applyPartitions l sel summs g = g & knownTuples .~ newTuples & applySummary mkUpdate sel summs
   where
@@ -381,7 +381,7 @@ mergePartitions kps = fix $ \rec pp -> let pp' = go pp in if pp == pp' then pp e
 and remove digits not contained in the tuple from the set of possibilities of the cells within the tuple.
 -}
 simplifyFromTupleOf ::
-    (Ord a, Enum a, VU.Unbox (Cell a)) => Grid a -> CommonPossibilities a -> Grid a
+    (Ord a, Enum a, VU.Unbox a) => Grid a -> CommonPossibilities a -> Grid a
 simplifyFromTupleOf g cp = cleanAll & knownTuples %~ S.insert cp
   where
     poss = cp ^. sharedPossibilities
@@ -406,7 +406,7 @@ simplifyFromTupleOf g cp = cleanAll & knownTuples %~ S.insert cp
 rest of the set.
 -}
 simplifyFromTuplesOf ::
-    (Ord a, TextShow a, VU.Unbox (Cell a), Enum a) =>
+    (Ord a, TextShow a, VU.Unbox a, Enum a) =>
     (SudokuSetTraversal a -> Grid a -> PartitionedPossibilities a) -> Grid a -> SudokuSetTraversal a -> Grid a
 simplifyFromTuplesOf partitionF g l = foldlOf' (traversed . filtered isTuple) simplifyFromTupleOf g partitions
   where
@@ -414,7 +414,7 @@ simplifyFromTuplesOf partitionF g l = foldlOf' (traversed . filtered isTuple) si
     filterTooSmall = filter (\cp -> nPoss cp > 1 && nCells cp > 1)
     partitions = filterTooSmall . mergePartitions (g ^. knownTuples) . nonEmpty $ partitionF l g
 
-wholeGridBySet :: (Ord a, VU.Unbox (Cell a)) => [SudokuSetTraversal a]
+wholeGridBySet :: (Ord a, VU.Unbox a) => [SudokuSetTraversal a]
 wholeGridBySet =
     [r | i <- [1 .. 9], let r = rowAt i]
         ++ [c | i <- [1 .. 9], let c = colAt i]
@@ -423,11 +423,11 @@ wholeGridBySet =
 {- | work across the entire grid and remove possible digits from all cells by looking for tuples formed by cells
 that must contain a complete set of the digits.
 -}
-simplifyFromCellTuples :: (Ord a, TextShow a, VU.Unbox (Cell a), Enum a, VU.IsoUnbox a Word16) => Grid a -> Grid a
+simplifyFromCellTuples :: (Ord a, TextShow a, VU.Unbox a, Enum a, VU.IsoUnbox a Word16) => Grid a -> Grid a
 simplifyFromCellTuples g = foldl' (simplifyFromTuplesOf partitionCells) g wholeGridBySet
 
 {- | work across the entire grid and remove possible digits from all cells by looking for tuples formed by digits
 along traversals where all digits must occur.
 -}
-simplifyFromDigitTuples :: (Ord a, TextShow a, VU.Unbox (Cell a), Enum a, VU.IsoUnbox a Word16) => Grid a -> Grid a
+simplifyFromDigitTuples :: (Ord a, TextShow a, VU.Unbox a, Enum a, VU.IsoUnbox a Word16) => Grid a -> Grid a
 simplifyFromDigitTuples g = foldl' (simplifyFromTuplesOf partitionDigits) g wholeGridBySet

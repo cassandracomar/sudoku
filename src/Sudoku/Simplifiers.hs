@@ -1,10 +1,3 @@
-{-# LANGUAGE DefaultSignatures #-}
-{-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE FlexibleInstances #-}
-{-# LANGUAGE FunctionalDependencies #-}
-{-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE TemplateHaskell #-}
-{-# LANGUAGE TypeFamilyDependencies #-}
 {-# LANGUAGE UndecidableInstances #-}
 
 module Sudoku.Simplifiers where
@@ -17,19 +10,7 @@ import Data.Functor (void)
 import Data.Kind (Type)
 import Data.List (intercalate)
 import Data.Monoid (Sum)
-import Data.Proxy (Proxy (Proxy))
 import Data.Text.Lazy (Text)
-import GHC.Word (Word16)
--- import Sudoku.Accelerate.Run (fullSimplifyStepHiddenSingles, fullSimplifyStepKnowns, fullSimplifyStepNakedSingles)
--- import Sudoku.Accelerate.Summaries (
---     AccSimplifier (..),
---     AccSimplify (..),
---     AccSimplifyHiddenSingles (..),
---     AccSimplifyKnowns (..),
---     AccSimplifyNakedSingles (..),
---     RawSimplifierRes (RawSimplifierRes),
---  )
-import Sudoku.Backtracking (Sudoku)
 import Sudoku.Cell
 import Sudoku.Grid (
     Grid,
@@ -42,11 +23,12 @@ import Sudoku.Grid (
  )
 import Sudoku.Summaries (
     ContradictionDesc,
-    Contradictions,
-    ExplainDesc (LookedForPointing),
+    ExplainDesc (..),
     LocationAlignment,
     RegionSummaries,
+    Summary,
     Union,
+    ValueConstraint,
     applySummary,
     checkSolved,
     countedPoss,
@@ -54,19 +36,16 @@ import Sudoku.Summaries (
     explainKnowns,
     explainNakedSingles,
     explainSummary,
-    factor,
     filterSummariesByCount,
     knowns,
     simplifyFromDigitsAligned,
     singlePossibility,
-    solved,
     summarizeWithContradictions,
     testForContradictions,
     updateFromHiddenSingles,
     updateFromKnowns,
     updateFromNakedSingles,
     valueAlignment,
-    (|.>),
  )
 import Sudoku.Tuples (
     CellPartitions,
@@ -82,7 +61,6 @@ import Sudoku.Tuples (
  )
 import TextShow (Builder, TextShow (showb), toLazyText, unlinesB)
 
--- import Data.Array.Accelerate qualified as A
 import Data.Map.Monoidal.Strict qualified as M
 import Data.Text.Lazy.IO qualified as T
 import Data.Vector.Unboxed qualified as VU
@@ -95,7 +73,7 @@ data SimplifierResult s a
 makeClassy ''SimplifierResult
 makeClassyPrisms ''SimplifierResult
 
-class (VU.Unbox (Cell a), Enum a, Ord a, TextShow a) => Simplifier f (s :: Type -> Type) a where
+class (VU.Unbox a, Enum a, Ord a, TextShow a) => Simplifier f (s :: Type -> Type) a where
     -- | type family to determine the kind of `Monoid` we need for a particular simplifier
     type MonoidFor f a
 
@@ -106,59 +84,21 @@ class (VU.Unbox (Cell a), Enum a, Ord a, TextShow a) => Simplifier f (s :: Type 
     explain :: (TextShow a) => f -> s a -> RegionSummaries (MonoidFor f a) -> [ExplainDesc a]
 
     -- | collect a monoidal summary for this step -- this summary will be collated into `RegionSummaries` and provided to `simplify`
-    summarize :: f -> Proxy s -> Fold (CellPos, Cell a) (MonoidFor f a)
+    summarize :: f -> Fold (CellPos, Cell a) (MonoidFor f a)
 
     -- | friendly description of this simplifier's algorithm
-    simplifierName :: f -> Proxy s -> Proxy a -> Builder
+    simplifierName :: f -> Builder
 
     -- | post-process the collected `RegionSummaries` -- can be used to filter summaries, e.g. to only keep those of a certain size.
     updateSummaries :: f -> s a -> RegionSummaries (MonoidFor f a) -> RegionSummaries (MonoidFor f a)
     updateSummaries _ _ = id
+    {-# INLINE updateSummaries #-}
 
     -- | get the underlying `grid` `VU.Vector` from the container type
     gridLens :: f -> Lens' (s a) (VU.Vector (Cell a))
     default gridLens :: (s ~ Grid) => f -> Lens' (s a) (VU.Vector (Cell a))
     gridLens _ = grid
     {-# INLINE gridLens #-}
-
-type CollectedSummaries f a =
-    (RegionSummaries (Contradictions a), RegionSummaries (Union (CellSet a)), RegionSummaries (MonoidFor f a))
-
-type SimplifierConstraint f (s :: Type -> Type) a =
-    (Simplifier f s a, Monoid (MonoidFor f a), Ord a, Enum a, VU.IsoUnbox a Word16, VU.Unbox a)
-
-collectSummaries :: forall f (s :: Type -> Type) a. (SimplifierConstraint f s a) => f -> s a -> CollectedSummaries f a
-collectSummaries f = normalize . over _2 factor . toSumms
-  where
-    toSumms = summarizeWithContradictions (gridLens f . cellPos) (solved |.> summarize f (Proxy @s))
-    normalize (c, (s, m)) = (c, s, m)
-{-# INLINE collectSummaries #-}
-
-fullSimplifyStep :: forall f s a. (SimplifierConstraint f s a) => f -> s a -> SimplifierResult s a
-fullSimplifyStep f g
-    | null detectedContras = Successful g' exps (checkSolved solvedSumms)
-    | otherwise = Contradicted g' detectedContras exps
-  where
-    (contras, solvedSumms, summs) = collectSummaries f g
-    summs' = updateSummaries f g summs
-    g' = simplify f summs' g
-    exps = explain f g' summs'
-    detectedContras = testForContradictions contras
-{-# SPECIALIZE fullSimplifyStep :: SimplifyKnowns -> Grid Digit -> SimplifierResult Grid Digit #-}
-{-# SPECIALIZE fullSimplifyStep :: SimplifyNakedSingles -> Grid Digit -> SimplifierResult Grid Digit #-}
-{-# SPECIALIZE fullSimplifyStep :: SimplifyHiddenSingles -> Grid Digit -> SimplifierResult Grid Digit #-}
-{-# SPECIALIZE fullSimplifyStep :: SimplifyCellTuples -> Grid Digit -> SimplifierResult Grid Digit #-}
-{-# SPECIALIZE fullSimplifyStep :: SimplifyDigitTuples -> Grid Digit -> SimplifierResult Grid Digit #-}
-{-# SPECIALIZE fullSimplifyStep :: SimplifyPointing -> Grid Digit -> SimplifierResult Grid Digit #-}
-
--- runAccSimplify :: (A.Vector (Cell Digit) -> RawSimplifierRes Digit) -> Grid Digit -> SimplifierResult Grid Digit
--- runAccSimplify act g
---     | contradicted' `A.indexArray` A.Z = Contradicted g' (A.toList contraDescs) (A.toList explainDescs)
---     | otherwise = Successful g' (A.toList explainDescs) (solved' `A.indexArray` A.Z)
---   where
---     !cs = VU.convert (g ^. grid)
---     RawSimplifierRes (!cs', explainDescs, contraDescs, !solved', !contradicted') = act cs
---     !g' = g & grid .~ VU.convert cs' & isSolved .~ (solved' `A.indexArray` A.Z)
 
 data SimplifyKnowns = SimplifyKnowns deriving (Eq)
 
@@ -173,17 +113,18 @@ data SimplifyDigitTuples = SimplifyDigitTuples deriving (Eq)
 data SimplifyPointing = SimplifyPointing deriving (Eq)
 
 type PrintConstraint f (s :: Type -> Type) a =
-    (TextShow a, Eq a, TextShow (s a), Ord a, Enum a, VU.Unbox a, VU.Unbox (Cell a), Eq (s a))
+    (TextShow a, Eq a, TextShow (s a), Ord a, Enum a, VU.Unbox a, Eq (s a))
 
 class (PrintConstraint f s a) => PrintStep f (s :: Type -> Type) a where
-    getSimplifierName :: f -> Proxy s -> Proxy a -> Builder
+    getSimplifierName :: f -> Builder
 
-    printStepImpl :: (MonadIO m, Alternative m, MonadReader SolverOptions m) => f -> s a -> SimplifierResult s a -> m ()
+    printStepImpl ::
+        (MonadIO m, Alternative m, MonadReader SolverOptions m, Simplifier f s a) => f -> s a -> SimplifierResult s a -> m ()
     printStepImpl f g res = void (ensure (== g) g') <|> (printVerbose . toLazyText . unlinesB) step
       where
         stepHeader =
             [ dashRow
-            , "Step: " <> getSimplifierName f (Proxy @s) (Proxy @a)
+            , "Step: " <> getSimplifierName @_ @s @a f
             , "Starting Grid: "
             , showb g
             , "Actions: "
@@ -198,83 +139,75 @@ class (PrintConstraint f s a) => PrintStep f (s :: Type -> Type) a where
         exps = res ^. explanations
         g' = res ^. simplifierOutput
 
-instance (PrintConstraint f s a, Simplifier f s a) => PrintStep f s a where
-    getSimplifierName = simplifierName
+instance {-# OVERLAPPABLE #-} (PrintConstraint f s a, Simplifier f s a) => PrintStep f s a where
+    getSimplifierName = simplifierName @f @s @a
 
--- instance {-# OVERLAPS #-} (PrintConstraint f s a, AccSimplifier AccSimplifyNakedSingles a) => PrintStep AccSimplifyNakedSingles s a where
---     getSimplifierName f _ = accSimplifierName f
-
--- instance {-# OVERLAPS #-} (PrintConstraint f s a, AccSimplifier AccSimplifyHiddenSingles a) => PrintStep AccSimplifyHiddenSingles s a where
---     getSimplifierName f _ = accSimplifierName f
-
-instance {-# OVERLAPS #-} (PrintConstraint SimplifyKnowns s a, Simplifier SimplifyKnowns s a) => PrintStep SimplifyKnowns s a where
-    getSimplifierName = simplifierName
+instance (PrintConstraint SimplifyKnowns s a, Simplifier SimplifyKnowns s a) => PrintStep SimplifyKnowns s a where
+    getSimplifierName = simplifierName @SimplifyKnowns @s @a
     printStepImpl _ _ _ = return ()
-    {-# SPECIALIZE printStepImpl ::
-        SimplifyKnowns -> Grid Digit -> SimplifierResult Grid Digit -> Sudoku Digit ()
-        #-}
 
--- instance {-# OVERLAPS #-} (PrintConstraint AccSimplifyKnowns s a, AccSimplifier AccSimplifyKnowns a) => PrintStep AccSimplifyKnowns s a where
---     getSimplifierName f _ = accSimplifierName f
---     printStepImpl _ _ _ = return ()
---     {-# SPECIALIZE printStepImpl ::
---         AccSimplifyKnowns -> Grid Digit -> SimplifierResult Grid Digit -> Sudoku Digit ()
---         #-}
+type SimplifierConstraint f (s :: Type -> Type) a = (Simplifier f s a, Monoid (MonoidFor f a), ValueConstraint a)
 
+{- | Existential wrapper holding a simplifier. provides type-directed dispatch to the execution function for a simplifier along with a token
+  to allow dispatch to other functions that need to know the type of the currently executing simplifier.
+-}
 data Simplify (s :: Type -> Type) a where
-    Simplify :: forall f s a. (SimplifierConstraint f s a, PrintStep f s a) => !f -> (f -> s a -> SimplifierResult s a) -> Simplify s a
+    Simplify ::
+        forall f s a.
+        (SimplifierConstraint f s a, PrintStep f s a) =>
+        { _simplifierHandle :: f
+        {- ^ can't actually use this function as it leads to escape of the existential.
+        provides a handle for dispatching simplifier-based effects. use via pattern-matching.
+        -}
+        , simplifier :: s a -> SimplifierResult s a
+        -- ^ execution function for the wrapped simplifier
+        }
+        -> Simplify s a
 
--- AccSimplifier :: forall f a. (AccSimplifier f a, PrintStep f Grid a) => f -> (Grid a -> SimplifierResult Grid a) -> Simplify Grid a
+mkSimplify :: (SimplifierConstraint f s a, PrintStep f s a) => f -> Simplify s a
+mkSimplify = Simplify <*> fullSimplifyStep
+{-# INLINE mkSimplify #-}
 
-mkSimplify ::
-    forall f (s :: Type -> Type) a. (SimplifierConstraint f s a, PrintStep f s a) => f -> Simplify s a
-mkSimplify f = Simplify f fullSimplifyStep
+collectSummaries ::
+    forall f (s :: Type -> Type) a. (SimplifierConstraint f s a) => f -> s a -> Summary (MonoidFor f a) a
+collectSummaries f = summarizeWithContradictions (gridLens f . cellPos) (summarize @_ @s f)
 
--- mkAccSimplify :: AccSimplify -> Simplify Grid Digit
--- mkAccSimplify AccSimplifyKnownsImpl = AccSimplifier AccSimplifyKnowns (runAccSimplify fullSimplifyStepKnowns)
--- mkAccSimplify AccSimplifyNakedSinglesImpl = AccSimplifier AccSimplifyNakedSingles (runAccSimplify fullSimplifyStepNakedSingles)
--- mkAccSimplify AccSimplifyHiddenSinglesImpl = AccSimplifier AccSimplifyHiddenSingles (runAccSimplify fullSimplifyStepHiddenSingles)
-
-printUnquoted :: (MonadIO m) => Text -> m ()
-printUnquoted = liftIO . T.putStrLn
-
-type ValueConstraint a = (VU.Unbox (Cell a), VU.IsoUnbox a Word16, VU.Unbox a, Enum a, Bounded a, Ord a, TextShow a)
+fullSimplifyStep :: forall f s a. (SimplifierConstraint f s a) => f -> s a -> SimplifierResult s a
+fullSimplifyStep f g
+    | null detectedContras = Successful g' exps (checkSolved solvedSumms)
+    | otherwise = Contradicted g' detectedContras exps
+  where
+    (!contras, !solvedSumms, !summs) = collectSummaries f g
+    !summs' = updateSummaries f g summs
+    !g' = simplify f summs' g
+    exps = explain f g' summs'
+    !detectedContras = testForContradictions contras
 
 instance (ValueConstraint a) => Simplifier SimplifyKnowns Grid a where
     type MonoidFor SimplifyKnowns a = Union (CellSet a)
 
     simplify _ = applySummary updateFromKnowns grid
-    {-# SPECIALIZE simplify ::
-        SimplifyKnowns
-        -> RegionSummaries (MonoidFor SimplifyKnowns Digit)
-        -> Grid Digit
-        -> Grid Digit
-        #-}
+    {-# INLINE simplify #-}
     explain _ _ = explainSummary explainKnowns
-    {-# SPECIALIZE explain ::
+    {-# SPECIALIZE NOINLINE explain ::
         SimplifyKnowns -> Grid Digit -> RegionSummaries (MonoidFor SimplifyKnowns Digit) -> [ExplainDesc Digit]
         #-}
-    summarize _ _ = _2 . knowns
+    summarize _ = _2 . knowns
     {-# INLINE summarize #-}
-    simplifierName _ _ _ = "Remove Knowns from possible cell values"
+    simplifierName _ = "Remove Knowns from possible cell values"
 
 instance (ValueConstraint a) => Simplifier SimplifyNakedSingles Grid a where
-    type MonoidFor SimplifyNakedSingles a = VU.Vector (CellPos, a)
+    type MonoidFor SimplifyNakedSingles a = [(CellPos, a)]
 
     simplify _ = applySummary updateFromNakedSingles grid
-    {-# SPECIALIZE simplify ::
-        SimplifyNakedSingles
-        -> RegionSummaries (MonoidFor SimplifyNakedSingles Digit)
-        -> Grid Digit
-        -> Grid Digit
-        #-}
+    {-# INLINE simplify #-}
     explain _ _ = explainSummary explainNakedSingles
-    {-# SPECIALIZE explain ::
+    {-# SPECIALIZE NOINLINE explain ::
         SimplifyNakedSingles -> Grid Digit -> RegionSummaries (MonoidFor SimplifyNakedSingles Digit) -> [ExplainDesc Digit]
         #-}
-    summarize _ _ = singlePossibility
+    summarize _ = singlePossibility
     {-# INLINE summarize #-}
-    simplifierName _ _ _ = "(Naked Single) Set cells with just one option to Known"
+    simplifierName _ = "(Naked Single) Set cells with just one option to Known"
 
 instance (ValueConstraint a) => Simplifier SimplifyHiddenSingles Grid a where
     type MonoidFor SimplifyHiddenSingles a = M.MonoidalMap a (Sum Int)
@@ -282,105 +215,79 @@ instance (ValueConstraint a) => Simplifier SimplifyHiddenSingles Grid a where
     {-# INLINE updateSummaries #-}
 
     simplify _ = applySummary updateFromHiddenSingles grid
-    {-# SPECIALIZE simplify ::
-        SimplifyHiddenSingles
-        -> RegionSummaries (MonoidFor SimplifyHiddenSingles Digit)
-        -> Grid Digit
-        -> Grid Digit
-        #-}
+    {-# INLINE simplify #-}
     explain _ _ = explainSummary explainHiddenSingles
-    {-# SPECIALIZE explain ::
+    {-# SPECIALIZE NOINLINE explain ::
         SimplifyHiddenSingles -> Grid Digit -> RegionSummaries (MonoidFor SimplifyHiddenSingles Digit) -> [ExplainDesc Digit]
         #-}
-    summarize _ _ = _2 . countedPoss
+    summarize _ = _2 . countedPoss
     {-# INLINE summarize #-}
-    simplifierName _ _ _ = "(Hidden Single) Place digit with just one location"
-
-instance (ValueConstraint a) => Simplifier SimplifyCellTuples Grid a where
-    type MonoidFor SimplifyCellTuples a = CellPartitions a
-    updateSummaries _ g = mergePartitionsInSummary _CellPartitions (g ^. knownTuples)
-    simplify _ _ = simplifyFromCellTuples
-    {-# SPECIALIZE simplify ::
-        SimplifyCellTuples
-        -> RegionSummaries (MonoidFor SimplifyCellTuples Digit)
-        -> Grid Digit
-        -> Grid Digit
-        #-}
-    explain _ g = explainSummary (explainPartitions g _CellPartitions)
-    {-# SPECIALIZE explain ::
-        SimplifyCellTuples -> Grid Digit -> RegionSummaries (MonoidFor SimplifyCellTuples Digit) -> [ExplainDesc Digit]
-        #-}
-    summarize _ _ = cellPartitions
-    {-# INLINE summarize #-}
-    simplifierName _ _ _ = "Locate tuples based on possible values of cells"
-
-instance (ValueConstraint a) => Simplifier SimplifyDigitTuples Grid a where
-    type MonoidFor SimplifyDigitTuples a = DigitPartitions a
-    updateSummaries _ g = mergePartitionsInSummary _DigitPartitions (g ^. knownTuples)
-    simplify _ _ = simplifyFromDigitTuples
-    {-# SPECIALIZE simplify ::
-        SimplifyDigitTuples
-        -> RegionSummaries (MonoidFor SimplifyDigitTuples Digit)
-        -> Grid Digit
-        -> Grid Digit
-        #-}
-    explain _ g = explainSummary (explainPartitions g _DigitPartitions)
-    {-# SPECIALIZE explain ::
-        SimplifyDigitTuples -> Grid Digit -> RegionSummaries (MonoidFor SimplifyDigitTuples Digit) -> [ExplainDesc Digit]
-        #-}
-    summarize _ _ = digitPartitions
-    {-# INLINE summarize #-}
-    simplifierName _ _ _ = "Locate tuples based on possible locations of digits"
+    simplifierName _ = "(Hidden Single) Place digit with just one location"
 
 instance (ValueConstraint a) => Simplifier SimplifyPointing Grid a where
     type MonoidFor SimplifyPointing a = LocationAlignment a
     simplify _ = simplifyFromDigitsAligned grid
-    {-# SPECIALIZE simplify ::
-        SimplifyPointing
-        -> RegionSummaries (MonoidFor SimplifyPointing Digit)
-        -> Grid Digit
-        -> Grid Digit
-        #-}
+    {-# INLINE simplify #-}
     explain _ _ _ = [LookedForPointing]
-    {-# SPECIALIZE explain ::
-        SimplifyPointing -> Grid Digit -> RegionSummaries (MonoidFor SimplifyPointing Digit) -> [ExplainDesc Digit]
-        #-}
-    summarize _ _ = valueAlignment
+    summarize _ = valueAlignment
     {-# INLINE summarize #-}
-    simplifierName _ _ _ = "(Pointing) Remove possibilities by locating alignment of values"
+    simplifierName _ = "(Pointing) Remove possibilities by locating alignment of values"
 
-cheapSimplifiers :: [[Simplify Grid Digit]]
+instance (ValueConstraint a) => Simplifier SimplifyCellTuples Grid a where
+    type MonoidFor SimplifyCellTuples a = CellPartitions a
+    updateSummaries _ g = mergePartitionsInSummary _CellPartitions (g ^. knownTuples)
+    {-# INLINE updateSummaries #-}
+    simplify _ _ = simplifyFromCellTuples
+    {-# INLINE simplify #-}
+    explain _ g = explainSummary (explainPartitions g _CellPartitions)
+    {-# SPECIALIZE NOINLINE explain ::
+        SimplifyCellTuples -> Grid Digit -> RegionSummaries (MonoidFor SimplifyCellTuples Digit) -> [ExplainDesc Digit]
+        #-}
+    summarize _ = cellPartitions
+    {-# INLINE summarize #-}
+    simplifierName _ = "Locate tuples based on possible values of cells"
+
+instance (ValueConstraint a) => Simplifier SimplifyDigitTuples Grid a where
+    type MonoidFor SimplifyDigitTuples a = DigitPartitions a
+    updateSummaries _ g = mergePartitionsInSummary _DigitPartitions (g ^. knownTuples)
+    {-# INLINE updateSummaries #-}
+    simplify _ _ = simplifyFromDigitTuples
+    {-# INLINE simplify #-}
+    explain _ g = explainSummary (explainPartitions g _DigitPartitions)
+    {-# SPECIALIZE NOINLINE explain ::
+        SimplifyDigitTuples -> Grid Digit -> RegionSummaries (MonoidFor SimplifyDigitTuples Digit) -> [ExplainDesc Digit]
+        #-}
+    summarize _ = digitPartitions
+    {-# INLINE summarize #-}
+    simplifierName _ = "Locate tuples based on possible locations of digits"
+
+printUnquoted :: (MonadIO m) => Text -> m ()
+printUnquoted = liftIO . T.putStrLn
+
+cheapSimplifiers :: (ValueConstraint a) => [[Simplify Grid a]]
 cheapSimplifiers =
     [ [mkSimplify SimplifyHiddenSingles]
     , [mkSimplify SimplifyNakedSingles]
     ]
+{-# SPECIALIZE cheapSimplifiers :: [[Simplify Grid Digit]] #-}
 
--- cheapAccSimplifiers :: [[Simplify Grid Digit]]
--- cheapAccSimplifiers =
---     [ [mkAccSimplify AccSimplifyHiddenSinglesImpl]
---     , [mkAccSimplify AccSimplifyNakedSinglesImpl]
---     ]
-
-expensiveSimplifiers :: [[Simplify Grid Digit]]
+expensiveSimplifiers :: (ValueConstraint a) => [[Simplify Grid a]]
 expensiveSimplifiers =
     [ [mkSimplify SimplifyPointing]
     , [mkSimplify SimplifyCellTuples]
     , [mkSimplify SimplifyDigitTuples]
     ]
+{-# SPECIALIZE expensiveSimplifiers :: [[Simplify Grid Digit]] #-}
 
-interleavedSteps :: [Simplify Grid Digit]
+interleavedSteps :: (ValueConstraint a) => [Simplify Grid a]
 interleavedSteps = [mkSimplify SimplifyKnowns]
+{-# SPECIALIZE interleavedSteps :: [Simplify Grid Digit] #-}
 
--- interleavedAccSteps :: [Simplify Grid Digit]
--- interleavedAccSteps = [mkAccSimplify AccSimplifyKnownsImpl]
+orderSimplifiers :: (ValueConstraint a) => [[Simplify Grid a]] -> [Simplify Grid a]
+orderSimplifiers = (interleavedSteps <>) . intercalate interleavedSteps
+{-# SPECIALIZE orderSimplifiers :: [[Simplify Grid Digit]] -> [Simplify Grid Digit] #-}
 
-orderSimplifiers :: [[Simplify Grid Digit]] -> [Simplify Grid Digit]
-orderSimplifiers = (interleavedSteps ++) . intercalate interleavedSteps
-
--- orderSimplifiersAcc :: [[Simplify Grid Digit]] -> [Simplify Grid Digit]
--- orderSimplifiersAcc = (interleavedAccSteps ++) . intercalate interleavedAccSteps
-
-runSimplifierPure :: Simplify Grid Digit -> Grid Digit -> SimplifierResult Grid Digit
-runSimplifierPure (Simplify f simplifier) = simplifier f
-
--- runSimplifierPure (AccSimplifier _ simplifier) = simplifier
+-- | run the provided simplifier on the given `Grid`
+runSimplifierPure :: (ValueConstraint a) => Simplify Grid a -> Grid a -> SimplifierResult Grid a
+runSimplifierPure = simplifier
+{-# SPECIALIZE runSimplifierPure :: Simplify Grid Digit -> Grid Digit -> SimplifierResult Grid Digit #-}

@@ -19,6 +19,13 @@
         pkgs,
         ...
       }: let
+        # nixpkgs' = inputs.nixpkgs.legacyPackages.${system}.applyPatches {
+        #   name = "nixpkgs-patched";
+        #   src = inputs.nixpkgs;
+        #   patches = [
+        #     ./containers-0-8.patch
+        #   ];
+        # };
         # accelerate-io = pkgs.fetchFromGitHub {
         #   owner = "acceleratehs";
         #   repo = "accelerate-io";
@@ -46,9 +53,8 @@
           };
         };
       in {
-        # _module.args.pkgs = import inputs.nixpkgs {
+        # _module.args.pkgs = import nixpkgs' {
         #   inherit system;
-        #   config.replaceStdenv = {pkgs}: pkgs.llvmPackages.libcxxStdenv;
         # };
         haskellProjects.ghc912 = {
           defaults.packages = {}; # Disable scanning for local package
@@ -67,17 +73,13 @@
               src = pkgs.fetchFromGitHub {
                 owner = "haskell";
                 repo = "haskell-language-server";
-                rev = "63e03b939bc81f9bf374c61854247c3c1b17ed10";
-                sha256 = "sha256-PiD81tGCJT7f5ds89GsgpUxGkkKniEtWDvnqH7gRjHg=";
+                rev = "b8c9b8466afe5521ce5ae3b2c7195cafe8dda371";
+                sha256 = "sha256-TKTAItDgtcFPWfoZTYRKGDAqY6oDYDfRPZhI84OgKzo=";
               };
               patches = [
                 (pkgs.fetchpatch {
-                  url = "https://patch-diff.githubusercontent.com/raw/haskell/haskell-language-server/pull/4596.patch";
-                  sha256 = "sha256-Cgmos+4ikza4lrCoP4mBx32xcosLY47sJsumuVIF95g=";
-                })
-                (pkgs.fetchpatch {
-                  url = "https://patch-diff.githubusercontent.com/raw/haskell/haskell-language-server/pull/4594.patch";
-                  sha256 = "sha256-gwxPMn1ZzAdbhsZ6TdybFsICIV1g/khkwwY/mFPqzaw=";
+                  url = "https://github.com/haskell/haskell-language-server/pull/4630.patch";
+                  sha256 = "sha256-ZIJaxFOniesaFTZfXHWDmJOtXYiQ6v029YGWdfMPkB8=";
                 })
                 ./inlay-hints-local-binding.patch
                 ./package-import-inlay-hints.patch
@@ -86,8 +88,8 @@
             hie-bios = pkgs.fetchFromGitHub {
               owner = "haskell";
               repo = "hie-bios";
-              rev = "24672b07c4adaed1156e9f8c4b776b3fb45989f9";
-              sha256 = "sha256-ej5g3SqLPHxIP8GcY/agyB2Gelka1XtIYKlSvyAu90w=";
+              rev = "1383519eabf349c300ca53b9efde76eaa36aa481";
+              sha256 = "sha256-G6H0VFjpqm3xwOeRT78+FBfMbRjfgA97u1WYBTk/bvU=";
             };
             cabal-install-parsers = pkgs.fetchFromGitHub {
               owner = "haskell-ci";
@@ -144,6 +146,12 @@
             hls-plugin-api.source = "${hls-src}/hls-plugin-api";
             hie-compat.source = "${hls-src}/hie-compat";
             hie-bios.source = hie-bios;
+            hiedb.source = pkgs.fetchFromGitHub {
+              owner = "wz1000";
+              repo = "HieDb";
+              rev = "524bb3c2e4f00269591760a83f90405a8f7e9fc9";
+              sha256 = "sha256-IOWPipoIKGOitV02FuyjSQxE5BwUmSrd8ImsL/djlVY=";
+            };
             # accelerate.source = accelerate;
             # accelerate-llvm.source = "${accelerate-llvm}/accelerate-llvm";
             # accelerate-llvm-native.source = "${accelerate-llvm-native}/accelerate-llvm-native";
@@ -185,6 +193,7 @@
             cabal-install-parsers.check = false;
             singletons-base.check = false;
             hie-bios.check = false;
+            hiedb.check = false;
             retrie.check = false;
             cryptonite.check = false;
 
@@ -287,10 +296,10 @@
             #   broken = false;
             #   jailbreak = true;
             # };
-            # sudoku = {
-            #   extraBuildTools = with pkgs.llvmPackages_16; [libllvm.dev];
-            #   extraLibraries = with pkgs.llvmPackages_16; [libllvm.lib];
-            # };
+            sudoku = {self, ...}: {
+              extraLibraries = [self.containers_0_8];
+              custom = drv: pkgs.haskell.lib.compose.allowInconsistentDependencies drv;
+            };
           };
 
           devShell = {

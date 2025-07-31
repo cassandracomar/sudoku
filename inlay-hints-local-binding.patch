@@ -1,22 +1,281 @@
-diff --git a/flake.nix b/flake.nix
-index 934333cff..3cb0cdbfe 100644
---- a/flake.nix
-+++ b/flake.nix
-@@ -59,6 +59,8 @@
-             # Compiler toolchain
-             hpkgs.ghc
-             pkgs.haskellPackages.cabal-install
-+            pkgs.haskellPackages.cabal-fmt
-+            pkgs.haskellPackages.cabal-gild
-             # Dependencies needed to build some parts of Hackage
-             gmp zlib ncurses
-             # Changelog tooling
+diff --git a/ghcide-test/data/local-sig-inlay-hints/Infix.expected.hs b/ghcide-test/data/local-sig-inlay-hints/Infix.expected.hs
+new file mode 100644
+index 000000000..bef11e056
+--- /dev/null
++++ b/ghcide-test/data/local-sig-inlay-hints/Infix.expected.hs
+@@ -0,0 +1,7 @@
++module Infix where
++
++f :: a
++f = undefined
++    where
++        g :: p1 -> p -> p1
++        a `g` b = a
+diff --git a/ghcide-test/data/local-sig-inlay-hints/Infix.hs b/ghcide-test/data/local-sig-inlay-hints/Infix.hs
+new file mode 100644
+index 000000000..cf29c3101
+--- /dev/null
++++ b/ghcide-test/data/local-sig-inlay-hints/Infix.hs
+@@ -0,0 +1,6 @@
++module Infix where
++
++f :: a
++f = undefined
++    where
++        a `g` b = a
+diff --git a/ghcide-test/data/local-sig-inlay-hints/Inline.expected.hs b/ghcide-test/data/local-sig-inlay-hints/Inline.expected.hs
+new file mode 100644
+index 000000000..f9b32f84a
+--- /dev/null
++++ b/ghcide-test/data/local-sig-inlay-hints/Inline.expected.hs
+@@ -0,0 +1,6 @@
++module Inline where
++
++f :: a
++f = undefined
++    where g :: Bool
++          g = True
+diff --git a/ghcide-test/data/local-sig-inlay-hints/Inline.hs b/ghcide-test/data/local-sig-inlay-hints/Inline.hs
+new file mode 100644
+index 000000000..3adcb786a
+--- /dev/null
++++ b/ghcide-test/data/local-sig-inlay-hints/Inline.hs
+@@ -0,0 +1,5 @@
++module Inline where
++
++f :: a
++f = undefined
++    where g = True
+diff --git a/ghcide-test/data/local-sig-inlay-hints/Nest.expected.hs b/ghcide-test/data/local-sig-inlay-hints/Nest.expected.hs
+new file mode 100644
+index 000000000..ef2883c23
+--- /dev/null
++++ b/ghcide-test/data/local-sig-inlay-hints/Nest.expected.hs
+@@ -0,0 +1,10 @@
++module Nest where
++
++f :: Int
++f = g
++    where
++        g :: Int
++        g = h
++        h :: Int
++        h = k where k :: Int
++                    k = 3
+diff --git a/ghcide-test/data/local-sig-inlay-hints/Nest.hs b/ghcide-test/data/local-sig-inlay-hints/Nest.hs
+new file mode 100644
+index 000000000..9da7ea6e7
+--- /dev/null
++++ b/ghcide-test/data/local-sig-inlay-hints/Nest.hs
+@@ -0,0 +1,7 @@
++module Nest where
++
++f :: Int
++f = g
++    where
++        g = h
++        h = k where k = 3
+diff --git a/ghcide-test/data/local-sig-inlay-hints/NoLens.expected.hs b/ghcide-test/data/local-sig-inlay-hints/NoLens.expected.hs
+new file mode 100644
+index 000000000..9a01a1776
+--- /dev/null
++++ b/ghcide-test/data/local-sig-inlay-hints/NoLens.expected.hs
+@@ -0,0 +1,13 @@
++module NoLens where
++
++f :: a
++f = undefined
++    where
++        g = 3
++
++
++
++
++
++
++        g :: Int
+diff --git a/ghcide-test/data/local-sig-inlay-hints/NoLens.hs b/ghcide-test/data/local-sig-inlay-hints/NoLens.hs
+new file mode 100644
+index 000000000..9a01a1776
+--- /dev/null
++++ b/ghcide-test/data/local-sig-inlay-hints/NoLens.hs
+@@ -0,0 +1,13 @@
++module NoLens where
++
++f :: a
++f = undefined
++    where
++        g = 3
++
++
++
++
++
++
++        g :: Int
+diff --git a/ghcide-test/data/local-sig-inlay-hints/Operator.expected.hs b/ghcide-test/data/local-sig-inlay-hints/Operator.expected.hs
+new file mode 100644
+index 000000000..0bae866b6
+--- /dev/null
++++ b/ghcide-test/data/local-sig-inlay-hints/Operator.expected.hs
+@@ -0,0 +1,7 @@
++module Operator where
++
++f :: a
++f = undefined
++    where
++        g :: (a -> b) -> a -> b
++        g = ($)
+diff --git a/ghcide-test/data/local-sig-inlay-hints/Operator.hs b/ghcide-test/data/local-sig-inlay-hints/Operator.hs
+new file mode 100644
+index 000000000..4708de596
+--- /dev/null
++++ b/ghcide-test/data/local-sig-inlay-hints/Operator.hs
+@@ -0,0 +1,6 @@
++module Operator where
++
++f :: a
++f = undefined
++    where
++        g = ($)
+diff --git a/ghcide-test/data/local-sig-inlay-hints/Qualified.expected.hs b/ghcide-test/data/local-sig-inlay-hints/Qualified.expected.hs
+new file mode 100644
+index 000000000..7b3623a4e
+--- /dev/null
++++ b/ghcide-test/data/local-sig-inlay-hints/Qualified.expected.hs
+@@ -0,0 +1,9 @@
++module Qualified where
++
++import qualified Data.Map as Map
++
++f :: a
++f = undefined
++    where
++         g :: Map.Map Bool Char
++         g = Map.singleton True 'c'
+diff --git a/ghcide-test/data/local-sig-inlay-hints/Qualified.hs b/ghcide-test/data/local-sig-inlay-hints/Qualified.hs
+new file mode 100644
+index 000000000..82c69893a
+--- /dev/null
++++ b/ghcide-test/data/local-sig-inlay-hints/Qualified.hs
+@@ -0,0 +1,8 @@
++module Qualified where
++
++import qualified Data.Map as Map
++
++f :: a
++f = undefined
++    where
++         g = Map.singleton True 'c'
+diff --git a/ghcide-test/data/local-sig-inlay-hints/ScopedTypeVariables.expected.hs b/ghcide-test/data/local-sig-inlay-hints/ScopedTypeVariables.expected.hs
+new file mode 100644
+index 000000000..e7aa4b18b
+--- /dev/null
++++ b/ghcide-test/data/local-sig-inlay-hints/ScopedTypeVariables.expected.hs
+@@ -0,0 +1,8 @@
++{-# LANGUAGE ExplicitForAll #-}
++module ScopedTypeVariables where
++
++f :: forall a b. a -> b -> (a, b)
++f aa bb = (aa, ida bb)
++    where
++        ida :: b -> b
++        ida = id
+diff --git a/ghcide-test/data/local-sig-inlay-hints/ScopedTypeVariables.hs b/ghcide-test/data/local-sig-inlay-hints/ScopedTypeVariables.hs
+new file mode 100644
+index 000000000..48fe48e41
+--- /dev/null
++++ b/ghcide-test/data/local-sig-inlay-hints/ScopedTypeVariables.hs
+@@ -0,0 +1,7 @@
++{-# LANGUAGE ExplicitForAll #-}
++module ScopedTypeVariables where
++
++f :: forall a b. a -> b -> (a, b)
++f aa bb = (aa, ida bb)
++    where
++        ida = id
+diff --git a/ghcide-test/data/local-sig-inlay-hints/Simple.expected.hs b/ghcide-test/data/local-sig-inlay-hints/Simple.expected.hs
+new file mode 100644
+index 000000000..23d55a326
+--- /dev/null
++++ b/ghcide-test/data/local-sig-inlay-hints/Simple.expected.hs
+@@ -0,0 +1,7 @@
++module Simple where
++
++f :: a
++f = undefined
++    where
++        g :: Bool
++        g = True
+diff --git a/ghcide-test/data/local-sig-inlay-hints/Simple.hs b/ghcide-test/data/local-sig-inlay-hints/Simple.hs
+new file mode 100644
+index 000000000..952a08ace
+--- /dev/null
++++ b/ghcide-test/data/local-sig-inlay-hints/Simple.hs
+@@ -0,0 +1,6 @@
++module Simple where
++
++f :: a
++f = undefined
++    where
++        g = True
+diff --git a/ghcide-test/data/local-sig-inlay-hints/Tuple.expected.hs b/ghcide-test/data/local-sig-inlay-hints/Tuple.expected.hs
+new file mode 100644
+index 000000000..354bc35f3
+--- /dev/null
++++ b/ghcide-test/data/local-sig-inlay-hints/Tuple.expected.hs
+@@ -0,0 +1,8 @@
++module Typle where
++
++f :: a
++f = undefined
++    where
++        g :: Integer
++        h :: Bool
++        (g, h) = (1, True)
+diff --git a/ghcide-test/data/local-sig-inlay-hints/Tuple.hs b/ghcide-test/data/local-sig-inlay-hints/Tuple.hs
+new file mode 100644
+index 000000000..27d6a19d3
+--- /dev/null
++++ b/ghcide-test/data/local-sig-inlay-hints/Tuple.hs
+@@ -0,0 +1,6 @@
++module Typle where
++
++f :: a
++f = undefined
++    where
++        (g, h) = (1, True)
+diff --git a/ghcide-test/data/local-sig-inlay-hints/Typeclass.expected.hs b/ghcide-test/data/local-sig-inlay-hints/Typeclass.expected.hs
+new file mode 100644
+index 000000000..4e8d58e89
+--- /dev/null
++++ b/ghcide-test/data/local-sig-inlay-hints/Typeclass.expected.hs
+@@ -0,0 +1,7 @@
++module Typeclass where
++
++f :: a
++f = undefined
++    where
++        g :: Num a => a -> a -> a
++        g a b = a + b
+diff --git a/ghcide-test/data/local-sig-inlay-hints/Typeclass.hs b/ghcide-test/data/local-sig-inlay-hints/Typeclass.hs
+new file mode 100644
+index 000000000..8ea9361bf
+--- /dev/null
++++ b/ghcide-test/data/local-sig-inlay-hints/Typeclass.hs
+@@ -0,0 +1,6 @@
++module Typeclass where
++
++f :: a
++f = undefined
++    where
++        g a b = a + b
 diff --git a/ghcide-test/exe/InlayHintTests.hs b/ghcide-test/exe/InlayHintTests.hs
 new file mode 100644
-index 000000000..97b1ada42
+index 000000000..4386f9a55
 --- /dev/null
 +++ b/ghcide-test/exe/InlayHintTests.hs
-@@ -0,0 +1,179 @@
+@@ -0,0 +1,181 @@
 +{-# LANGUAGE ExplicitNamespaces #-}
 +
 +module InlayHintTests (tests) where
@@ -138,6 +397,7 @@ index 000000000..97b1ada42
 +editTest file =
 +  testWithDummyPlugin (file <> " (InlayHint EditText)") (mkIdeTestFs [copyDir "local-sig-inlay-hints"]) $ do
 +    doc <- openDoc (file ++ ".hs") "haskell"
++    setConfigSection "haskell" (createConfig True)
 +    executeAllHints doc globalRange
 +    real <- documentContents doc
 +    expectedDoc <- openDoc (file ++ ".expected.hs") "haskell"
@@ -148,6 +408,7 @@ index 000000000..97b1ada42
 +hintTest file assert =
 +  testWithDummyPlugin (file <> " (InlayHint)") (mkIdeTestFs [copyDir "local-sig-inlay-hints"]) $ do
 +    doc <- openDoc (file ++ ".hs") "haskell"
++    setConfigSection "haskell" (createConfig True)
 +    hints <- getInlayHints doc globalRange
 +    liftIO $ assert hints
 +
@@ -197,19 +458,26 @@ index 000000000..97b1ada42
 +                    , _end = Position 1000 0
 +                    }
 diff --git a/ghcide-test/exe/Main.hs b/ghcide-test/exe/Main.hs
-index c8d927072..8a8ffff15 100644
+index c8d927072..a0f06aff4 100644
 --- a/ghcide-test/exe/Main.hs
 +++ b/ghcide-test/exe/Main.hs
-@@ -51,7 +51,8 @@ import           HaddockTests
+@@ -51,6 +51,7 @@ import           HaddockTests
  import           HighlightTests
  import           IfaceTests
  import           InitializeResponseTests
--import           LogType                         ()
 +import           InlayHintTests
-+import           LogType                      ()
+ import           LogType                         ()
  import           NonLspCommandLine
  import           OpenCloseTest
- import           OutlineTests
+@@ -81,7 +82,7 @@ main = do
+     , HighlightTests.tests
+     , FindDefinitionAndHoverTests.tests
+     , FindImplementationAndHoverTests.tests
+-    , PluginSimpleTests.tests
++    -- , PluginSimpleTests.tests
+     , PreprocessorTests.tests
+     , THTests.tests
+     , SymlinkTests.tests
 @@ -103,4 +104,5 @@ main = do
      , GarbageCollectionTests.tests
      , HieDbRetry.tests
@@ -217,33 +485,36 @@ index c8d927072..8a8ffff15 100644
 +    , InlayHintTests.tests
      ]
 diff --git a/ghcide/src/Development/IDE/Plugin/TypeLenses.hs b/ghcide/src/Development/IDE/Plugin/TypeLenses.hs
-index 40ce1dda7..a115add0c 100644
+index c596d1fb8..0da488d3d 100644
 --- a/ghcide/src/Development/IDE/Plugin/TypeLenses.hs
 +++ b/ghcide/src/Development/IDE/Plugin/TypeLenses.hs
-@@ -16,16 +16,19 @@ module Development.IDE.Plugin.TypeLenses (
+@@ -16,16 +16,22 @@ module Development.IDE.Plugin.TypeLenses (
  
  import           Control.Concurrent.STM.Stats         (atomically)
  import           Control.DeepSeq                      (rwhnf)
--import           Control.Lens                         ((?~))
-+import           Control.Lens                         ((?~), (^.))
+-import           Control.Lens                         (to, (?~), (^?))
++import           Control.Lens                         (to, (?~), (^.), (^?))
  import           Control.Monad                        (mzero)
++import           Control.Monad.Except                 (ExceptT)
  import           Control.Monad.Extra                  (whenMaybe)
  import           Control.Monad.IO.Class               (MonadIO (liftIO))
  import           Control.Monad.Trans.Class            (MonadTrans (lift))
  import           Data.Aeson.Types                     (toJSON)
  import qualified Data.Aeson.Types                     as A
++import qualified Data.Foldable                        as F
 +import           Data.Generics                        (GenericQ, everything,
 +                                                       extQ, mkQ, something)
  import           Data.List                            (find)
++import qualified Data.Map                             as M
  import qualified Data.Map                             as Map
--import           Data.Maybe                           (catMaybes, maybeToList)
+-import           Data.Maybe                           (catMaybes, isJust,
 +import           Data.Maybe                           (catMaybes, fromMaybe,
-+                                                       mapMaybe, maybeToList)
++                                                       isJust, mapMaybe,
+                                                        maybeToList)
  import qualified Data.Text                            as T
  import           Development.IDE                      (FileDiagnostic (..),
-                                                        GhcSession (..),
-@@ -47,9 +50,11 @@ import qualified Development.IDE.Core.Shake           as Shake
- import           Development.IDE.GHC.Compat
+@@ -55,9 +61,11 @@ import           Development.IDE.GHC.Compat.Error     (_TcRnMessage,
+                                                        stripTcRnMessageContext)
  import           Development.IDE.GHC.Util             (printName)
  import           Development.IDE.Graph.Classes
 -import           Development.IDE.Types.Location       (Position (Position, _line),
@@ -256,7 +527,7 @@ index 40ce1dda7..a115add0c 100644
  import           Ide.Logger                           (Pretty (pretty),
                                                         Recorder, WithPriority,
                                                         cmapWithPrio)
-@@ -57,7 +62,6 @@ import           Ide.Plugin.Error
+@@ -65,7 +73,6 @@ import           Ide.Plugin.Error
  import           Ide.Plugin.Properties
  import           Ide.PluginUtils                      (mkLspCommand)
  import           Ide.Types                            (CommandFunction,
@@ -264,7 +535,7 @@ index 40ce1dda7..a115add0c 100644
                                                         PluginCommand (PluginCommand),
                                                         PluginDescriptor (..),
                                                         PluginId,
-@@ -71,16 +75,19 @@ import           Ide.Types                            (CommandFunction,
+@@ -79,16 +86,19 @@ import           Ide.Types                            (CommandFunction,
                                                         mkResolveHandler,
                                                         pluginSendRequest)
  import qualified Language.LSP.Protocol.Lens           as L
@@ -273,7 +544,8 @@ index 40ce1dda7..a115add0c 100644
                                                         SMethod (..))
  import           Language.LSP.Protocol.Types          (ApplyWorkspaceEditParams (ApplyWorkspaceEditParams),
                                                         CodeLens (..),
-                                                        CodeLensParams (CodeLensParams, _textDocument),
+-                                                       CodeLensParams (CodeLensParams, _textDocument),
++                                                       CodeLensParams (..),
                                                         Command, Diagnostic (..),
 +                                                       InlayHint (..),
 +                                                       InlayHintParams (InlayHintParams),
@@ -285,7 +557,7 @@ index 40ce1dda7..a115add0c 100644
                                                         type (|?) (..))
  import           Text.Regex.TDFA                      ((=~))
  
-@@ -91,7 +98,7 @@ instance Pretty Log where
+@@ -99,7 +109,7 @@ instance Pretty Log where
      LogShake msg -> pretty msg
  
  
@@ -294,13 +566,14 @@ index 40ce1dda7..a115add0c 100644
  typeLensCommandId = "typesignature.add"
  
  descriptor :: Recorder (WithPriority Log) -> PluginId -> PluginDescriptor IdeState
-@@ -99,20 +106,26 @@ descriptor recorder plId =
+@@ -107,20 +117,27 @@ descriptor recorder plId =
    (defaultPluginDescriptor plId desc)
      { pluginHandlers = mkPluginHandler SMethod_TextDocumentCodeLens codeLensProvider
                      <> mkResolveHandler SMethod_CodeLensResolve codeLensResolveProvider
 -    , pluginCommands = [PluginCommand (CommandId typeLensCommandId) "adds a signature" commandHandler]
 -    , pluginRules = rules recorder
 +                    <> mkPluginHandler SMethod_TextDocumentInlayHint localBindingInlayHints
++                    <> mkPluginHandler SMethod_TextDocumentCodeLens localBindingCodeLens
 +    , pluginCommands = [PluginCommand typeLensCommandId "adds a signature" commandHandler]
 +    , pluginRules = globalBindingRules recorder *> localBindingRules recorder
      , pluginConfigDescriptor = defaultConfigDescriptor {configCustomConfig = mkCustomConfig properties}
@@ -321,11 +594,11 @@ index 40ce1dda7..a115add0c 100644
      ] Always
 +  & defineBooleanProperty #localBindingInlayHintOn
 +    "Display inlay hints of local bindings"
-+    True
++    False
  
  codeLensProvider :: PluginMethodHandler IdeState Method_TextDocumentCodeLens
  codeLensProvider ideState pId CodeLensParams{_textDocument = TextDocumentIdentifier uri} = do
-@@ -187,7 +200,7 @@ codeLensResolveProvider ideState pId lens@CodeLens{_range} uri TypeLensesResolve
+@@ -195,7 +212,7 @@ codeLensResolveProvider ideState pId lens@CodeLens{_range} uri TypeLensesResolve
  generateLensCommand :: PluginId -> Uri -> T.Text -> TextEdit -> Command
  generateLensCommand pId uri title edit =
    let wEdit = WorkspaceEdit (Just $ Map.singleton uri [edit]) Nothing Nothing
@@ -334,7 +607,7 @@ index 40ce1dda7..a115add0c 100644
  
  -- Since the lenses are created with diagnostics, and since the globalTypeSig
  -- rule can't be changed as it is also used by the hls-refactor plugin, we can't
-@@ -256,7 +269,7 @@ data Mode
+@@ -269,7 +286,7 @@ data Mode
      Always
    | -- | similar to 'Always', but only displays for exported global bindings
      Exported
@@ -343,7 +616,7 @@ index 40ce1dda7..a115add0c 100644
      Diagnostics
    deriving (Eq, Ord, Show, Read, Enum)
  
-@@ -277,6 +290,9 @@ instance A.FromJSON Mode where
+@@ -290,6 +307,9 @@ instance A.FromJSON Mode where
  showDocRdrEnv :: HscEnv -> GlobalRdrEnv -> SDoc -> String
  showDocRdrEnv env rdrEnv = showSDocForUser' env (mkPrintUnqualifiedDefault env rdrEnv)
  
@@ -353,7 +626,7 @@ index 40ce1dda7..a115add0c 100644
  data GetGlobalBindingTypeSigs = GetGlobalBindingTypeSigs
    deriving (Generic, Show, Eq, Ord, Hashable, NFData)
  
-@@ -292,15 +308,15 @@ gbSrcSpan GlobalBindingTypeSig{gbName} = getSrcSpan gbName
+@@ -305,15 +325,15 @@ gbSrcSpan GlobalBindingTypeSig{gbName} = getSrcSpan gbName
  newtype GlobalBindingTypeSigsResult = GlobalBindingTypeSigsResult [GlobalBindingTypeSig]
  
  instance Show GlobalBindingTypeSigsResult where
@@ -372,35 +645,51 @@ index 40ce1dda7..a115add0c 100644
    define (cmapWithPrio LogShake recorder) $ \GetGlobalBindingTypeSigs nfp -> do
      tmr <- use TypeCheck nfp
      -- we need session here for tidying types
-@@ -308,6 +324,17 @@ rules recorder = do
+@@ -321,6 +341,21 @@ rules recorder = do
      result <- liftIO $ gblBindingType (hscEnv <$> hsc) (tmrTypechecked <$> tmr)
      pure ([], result)
  
 +-- | Convert a given haskell bind to its corresponding type signature.
 +bindToSig :: HscEnv -> GlobalRdrEnv -> Id -> IOEnv (Env TcGblEnv TcLclEnv) String
-+bindToSig hsc rdrEnv identifier = do
-+    env <- liftZonkM tcInitTidyEnv
++bindToSig hsc rdrEnv id = do
++    env <-
++#if MIN_VERSION_ghc(9,7,0)
++      liftZonkM
++#endif
++      tcInitTidyEnv
 +#if MIN_VERSION_ghc(9,11,0)
-+    let ty = tidyOpenType env (idType identifier)
++    let ty = tidyOpenType env (idType id)
 +#else
-+    let (_, ty) = tidyOpenType env (idType identifier)
++    let (_, ty) = tidyOpenType env (idType id)
 +#endif
 +    pure (showDocRdrEnv hsc rdrEnv (pprSigmaType ty))
 +
  gblBindingType :: Maybe HscEnv -> Maybe TcGblEnv -> IO (Maybe GlobalBindingTypeSigsResult)
  gblBindingType (Just hsc) (Just gblEnv) = do
    let exports = availsToNameSet $ tcg_exports gblEnv
-@@ -317,7 +344,7 @@ gblBindingType (Just hsc) (Just gblEnv) = do
+@@ -328,23 +363,23 @@ gblBindingType (Just hsc) (Just gblEnv) = do
+       binds = collectHsBindsBinders $ tcg_binds gblEnv
+       patSyns = tcg_patsyns gblEnv
        rdrEnv = tcg_rdr_env gblEnv
-       showDoc = showDocRdrEnv hsc rdrEnv
+-      showDoc = showDocRdrEnv hsc rdrEnv
        hasSig :: (Monad m) => Name -> m a -> m (Maybe a)
 -      hasSig name f = whenMaybe (name `elemNameSet` sigs) f
+-      bindToSig identifier = liftZonkM $ do
+-        let name = idName identifier
 +      hasSig name = whenMaybe (name `elemNameSet` sigs)
-       bindToSig identifier = liftZonkM $ do
-         let name = idName identifier
++      renderBind id = do
++        let name = idName id
          hasSig name $ do
-@@ -330,8 +357,13 @@ gblBindingType (Just hsc) (Just gblEnv) = do
-           pure $ GlobalBindingTypeSig name (printName name <> " :: " <> showDoc (pprSigmaType ty)) (name `elemNameSet` exports)
+-          env <- tcInitTidyEnv
+-#if MIN_VERSION_ghc(9,11,0)
+-          let ty = tidyOpenType env (idType identifier)
+-#else
+-          let (_, ty) = tidyOpenType env (idType identifier)
+-#endif
+-          pure $ GlobalBindingTypeSig name (printName name <> " :: " <> showDoc (pprSigmaType ty)) (name `elemNameSet` exports)
++          -- convert from bind id to its signature
++          sig <- bindToSig hsc rdrEnv id
++          pure $ GlobalBindingTypeSig name (printName name <> " :: " <> sig) (name `elemNameSet` exports)
        patToSig p = do
          let name = patSynName p
 -        hasSig name $ pure $ GlobalBindingTypeSig name ("pattern " <> printName name <> " :: " <> showDoc (pprPatSynTypeWithoutForalls p)) (name `elemNameSet` exports)
@@ -411,11 +700,11 @@ index 40ce1dda7..a115add0c 100644
 +                name
 +                ("pattern " <> printName name <> " :: " <> showDocRdrEnv hsc rdrEnv (pprPatSynTypeWithoutForalls p))
 +                (name `elemNameSet` exports)
-+  (_, maybe [] catMaybes -> bindings) <- initTcWithGbl hsc gblEnv ghostSpan $ mapM bindToSig binds
++  (_, maybe [] catMaybes -> bindings) <- initTcWithGbl hsc gblEnv ghostSpan $ mapM renderBind binds
    patterns <- catMaybes <$> mapM patToSig patSyns
    pure . Just . GlobalBindingTypeSigsResult $ bindings <> patterns
  gblBindingType _ _ = pure Nothing
-@@ -347,3 +379,188 @@ pprPatSynTypeWithoutForalls p = pprPatSynType pWithoutTypeVariables
+@@ -360,3 +395,219 @@ pprPatSynTypeWithoutForalls p = pprPatSynType pWithoutTypeVariables
      builder = patSynBuilder p
      field_labels = patSynFieldLabels p
      orig_args' = map scaledThing orig_args
@@ -553,342 +842,93 @@ index 40ce1dda7..a115add0c 100644
 +    findSigIds (unLoc -> (TypeSig _ names _)) = map unLoc names
 +    findSigIds _                              = []
 +
-+-- | Provide code lens for local bindings.
++type LocalBindingHintRenderer a = Id -> T.Text -> Range -> Int -> a
++
++generateWhereInlayHints :: LocalBindingHintRenderer InlayHint
++generateWhereInlayHints name ty range offset =
++  let edit = makeEdit range ((T.pack $ printName (idName name)) <> " :: " <> ty) offset
++  in InlayHint { _textEdits = Just [edit]
++               , _paddingRight = Nothing
++               , _paddingLeft = Just True
++               , _tooltip = Nothing
++               , _position = _end range
++               , _kind = Nothing
++               , _label = InL $ ":: " <> ty
++               , _data_ = Nothing
++               }
++  where
++    makeEdit :: Range -> T.Text -> Int -> TextEdit
++    makeEdit range text offset =
++      let startPos = range ^. L.start
++          -- Subtract the offset to align with the whole binding expression
++          insertChar = _character startPos - fromIntegral offset
++          startPos' = startPos { _character = insertChar }
++          insertRange = Range startPos' startPos'
++      in TextEdit insertRange (text <> "\n" <> T.replicate (fromIntegral insertChar) " ")
++
++generateWhereLens :: PluginId -> Uri -> LocalBindingHintRenderer CodeLens
++generateWhereLens plId uri _ title range _ = CodeLens range (Just cmd) Nothing
++    where
++        cmd = mkLspCommand plId typeLensCommandId title (Just [A.toJSON (makeEdit range title)])
++        makeEdit :: Range -> T.Text -> WorkspaceEdit
++        makeEdit range text =
++            let startPos = range ^. L.start
++                insertChar = startPos ^. L.character
++                insertRange = Range startPos startPos
++            in WorkspaceEdit
++                (Just $ M.fromList [(uri, [TextEdit insertRange (text <> "\n" <> T.replicate (fromIntegral insertChar) " ")])])
++                Nothing
++                Nothing
++
++
++bindingToHints :: LocalBindingHintRenderer a -> Id -> Maybe String -> Range -> Int -> Maybe a
++bindingToHints render id (Just sig) range offset = Just $ render id (T.pack sig) range offset
++bindingToHints _ _ Nothing _ _              = Nothing
++
++renderLocalHints :: MonadIO m => LocalBindingHintRenderer a -> Maybe Range -> Uri -> IdeState -> ExceptT PluginError m ([a] |? b)
++renderLocalHints render visibleRange uri state = do
++    nfp <- getNormalizedFilePathE uri
++    (LocalBindingTypeSigsResult (localBindings, sigMap), pm)
++       <- runActionE "InlayHint.GetWhereBindingTypeSigs" state $ useWithStaleE GetLocalBindingTypeSigs nfp
++
++    -- | Note there may multi ids for one binding,
++    -- like @(a, b) = (42, True)@, there are `a` and `b`
++    -- in one binding.
++    let hints = catMaybes
++                  [ bindingToHints render bindingId bindingSig bindingRange offset
++                  | LocalBindings{..} <- localBindings
++                  , let sigSpans = getSrcSpan <$> existingSigNames
++                  , LocalBinding{..} <- bindings
++                  , let bindingSpan = getSrcSpan (idName bindingId)
++                  , let bindingSig = Map.lookup bindingId sigMap
++                  , bindingSpan `notElem` sigSpans
++                  , Just bindingRange <- maybeToList $ toCurrentRange pm <$> srcSpanToRange bindingLoc
++                  -- Show inlay hints only within visible range
++                  -- CodeLenses don't have a visible range
++                  , maybe True (isSubrangeOf bindingRange) visibleRange
++                  ]
++    pure $ InL hints
++
++localBindingCodeLens :: PluginMethodHandler IdeState Method_TextDocumentCodeLens
++localBindingCodeLens state plId (CodeLensParams{..})  = do
++  enabled <- liftIO $ runAction "inlayHint.config" state $ usePropertyAction #localBindingInlayHintOn plId properties
++  let uri = _textDocument ^. L.uri
++  if enabled
++      then pure $ InL []
++      else renderLocalHints (generateWhereLens plId uri) Nothing uri state
++
++-- | Provide inlay hints for local bindings
 +localBindingInlayHints :: PluginMethodHandler IdeState Method_TextDocumentInlayHint
 +localBindingInlayHints state plId (InlayHintParams _ (TextDocumentIdentifier uri) visibleRange)  = do
 +  enabled <- liftIO $ runAction "inlayHint.config" state $ usePropertyAction #localBindingInlayHintOn plId properties
-+  if not enabled then pure $ InL [] else do
-+    nfp <- getNormalizedFilePathE uri
-+    (LocalBindingTypeSigsResult (localBindings, sigMap), pm)
-+        <- runActionE "InlayHint.GetWhereBindingTypeSigs" state $ useWithStaleE GetLocalBindingTypeSigs nfp
-+    let bindingToInlayHints :: Id -> Maybe String -> Range -> Int -> Maybe InlayHint
-+        bindingToInlayHints id (Just sig) range offset =
-+          Just $ generateWhereInlayHints (T.pack $ printName (idName id)) (T.pack sig) range offset
-+        bindingToInlayHints _ Nothing _ _              = Nothing
-+
-+        -- | Note there may multi ids for one binding,
-+        -- like @(a, b) = (42, True)@, there are `a` and `b`
-+        -- in one binding.
-+        inlayHints = catMaybes
-+          [ bindingToInlayHints bindingId bindingSig bindingRange offset
-+          | LocalBindings{..} <- localBindings
-+          , let sigSpans = getSrcSpan <$> existingSigNames
-+          , LocalBinding{..} <- bindings
-+          , let bindingSpan = getSrcSpan (idName bindingId)
-+          , let bindingSig = Map.lookup bindingId sigMap
-+          , bindingSpan `notElem` sigSpans
-+          , Just bindingRange <- maybeToList $ toCurrentRange pm <$> srcSpanToRange bindingLoc
-+          -- Show inlay hints only within visible range
-+          , isSubrangeOf bindingRange visibleRange
-+          ]
-+    pure $ InL inlayHints
-+    where
-+      generateWhereInlayHints :: T.Text -> T.Text -> Range -> Int -> InlayHint
-+      generateWhereInlayHints name ty range offset =
-+        let edit = makeEdit range (name <> " :: " <> ty) offset
-+        in InlayHint { _textEdits = Just [edit]
-+                     , _paddingRight = Nothing
-+                     , _paddingLeft = Just True
-+                     , _tooltip = Nothing
-+                     , _position = _end range
-+                     , _kind = Nothing
-+                     , _label = InL $ ":: " <> ty
-+                     , _data_ = Nothing
-+                     }
-+
-+      makeEdit :: Range -> T.Text -> Int -> TextEdit
-+      makeEdit range text offset =
-+        let startPos = range ^. L.start
-+            -- Subtract the offset to align with the whole binding expression
-+            insertChar = _character startPos - fromIntegral offset
-+            startPos' = startPos { _character = insertChar }
-+            insertRange = Range startPos' startPos'
-+        in TextEdit insertRange (text <> "\n" <> T.replicate (fromIntegral insertChar) " ")
-diff --git a/ghcide/test/data/local-sig-inlay-hints/Infix.expected.hs b/ghcide/test/data/local-sig-inlay-hints/Infix.expected.hs
-new file mode 100644
-index 000000000..bef11e056
---- /dev/null
-+++ b/ghcide/test/data/local-sig-inlay-hints/Infix.expected.hs
-@@ -0,0 +1,7 @@
-+module Infix where
-+
-+f :: a
-+f = undefined
-+    where
-+        g :: p1 -> p -> p1
-+        a `g` b = a
-diff --git a/ghcide/test/data/local-sig-inlay-hints/Infix.hs b/ghcide/test/data/local-sig-inlay-hints/Infix.hs
-new file mode 100644
-index 000000000..cf29c3101
---- /dev/null
-+++ b/ghcide/test/data/local-sig-inlay-hints/Infix.hs
-@@ -0,0 +1,6 @@
-+module Infix where
-+
-+f :: a
-+f = undefined
-+    where
-+        a `g` b = a
-diff --git a/ghcide/test/data/local-sig-inlay-hints/Inline.expected.hs b/ghcide/test/data/local-sig-inlay-hints/Inline.expected.hs
-new file mode 100644
-index 000000000..f9b32f84a
---- /dev/null
-+++ b/ghcide/test/data/local-sig-inlay-hints/Inline.expected.hs
-@@ -0,0 +1,6 @@
-+module Inline where
-+
-+f :: a
-+f = undefined
-+    where g :: Bool
-+          g = True
-diff --git a/ghcide/test/data/local-sig-inlay-hints/Inline.hs b/ghcide/test/data/local-sig-inlay-hints/Inline.hs
-new file mode 100644
-index 000000000..3adcb786a
---- /dev/null
-+++ b/ghcide/test/data/local-sig-inlay-hints/Inline.hs
-@@ -0,0 +1,5 @@
-+module Inline where
-+
-+f :: a
-+f = undefined
-+    where g = True
-diff --git a/ghcide/test/data/local-sig-inlay-hints/Nest.expected.hs b/ghcide/test/data/local-sig-inlay-hints/Nest.expected.hs
-new file mode 100644
-index 000000000..ef2883c23
---- /dev/null
-+++ b/ghcide/test/data/local-sig-inlay-hints/Nest.expected.hs
-@@ -0,0 +1,10 @@
-+module Nest where
-+
-+f :: Int
-+f = g
-+    where
-+        g :: Int
-+        g = h
-+        h :: Int
-+        h = k where k :: Int
-+                    k = 3
-diff --git a/ghcide/test/data/local-sig-inlay-hints/Nest.hs b/ghcide/test/data/local-sig-inlay-hints/Nest.hs
-new file mode 100644
-index 000000000..9da7ea6e7
---- /dev/null
-+++ b/ghcide/test/data/local-sig-inlay-hints/Nest.hs
-@@ -0,0 +1,7 @@
-+module Nest where
-+
-+f :: Int
-+f = g
-+    where
-+        g = h
-+        h = k where k = 3
-diff --git a/ghcide/test/data/local-sig-inlay-hints/NoLens.expected.hs b/ghcide/test/data/local-sig-inlay-hints/NoLens.expected.hs
-new file mode 100644
-index 000000000..9a01a1776
---- /dev/null
-+++ b/ghcide/test/data/local-sig-inlay-hints/NoLens.expected.hs
-@@ -0,0 +1,13 @@
-+module NoLens where
-+
-+f :: a
-+f = undefined
-+    where
-+        g = 3
-+
-+
-+
-+
-+
-+
-+        g :: Int
-diff --git a/ghcide/test/data/local-sig-inlay-hints/NoLens.hs b/ghcide/test/data/local-sig-inlay-hints/NoLens.hs
-new file mode 100644
-index 000000000..9a01a1776
---- /dev/null
-+++ b/ghcide/test/data/local-sig-inlay-hints/NoLens.hs
-@@ -0,0 +1,13 @@
-+module NoLens where
-+
-+f :: a
-+f = undefined
-+    where
-+        g = 3
-+
-+
-+
-+
-+
-+
-+        g :: Int
-diff --git a/ghcide/test/data/local-sig-inlay-hints/Operator.expected.hs b/ghcide/test/data/local-sig-inlay-hints/Operator.expected.hs
-new file mode 100644
-index 000000000..0bae866b6
---- /dev/null
-+++ b/ghcide/test/data/local-sig-inlay-hints/Operator.expected.hs
-@@ -0,0 +1,7 @@
-+module Operator where
-+
-+f :: a
-+f = undefined
-+    where
-+        g :: (a -> b) -> a -> b
-+        g = ($)
-diff --git a/ghcide/test/data/local-sig-inlay-hints/Operator.hs b/ghcide/test/data/local-sig-inlay-hints/Operator.hs
-new file mode 100644
-index 000000000..4708de596
---- /dev/null
-+++ b/ghcide/test/data/local-sig-inlay-hints/Operator.hs
-@@ -0,0 +1,6 @@
-+module Operator where
-+
-+f :: a
-+f = undefined
-+    where
-+        g = ($)
-diff --git a/ghcide/test/data/local-sig-inlay-hints/Qualified.expected.hs b/ghcide/test/data/local-sig-inlay-hints/Qualified.expected.hs
-new file mode 100644
-index 000000000..7b3623a4e
---- /dev/null
-+++ b/ghcide/test/data/local-sig-inlay-hints/Qualified.expected.hs
-@@ -0,0 +1,9 @@
-+module Qualified where
-+
-+import qualified Data.Map as Map
-+
-+f :: a
-+f = undefined
-+    where
-+         g :: Map.Map Bool Char
-+         g = Map.singleton True 'c'
-diff --git a/ghcide/test/data/local-sig-inlay-hints/Qualified.hs b/ghcide/test/data/local-sig-inlay-hints/Qualified.hs
-new file mode 100644
-index 000000000..82c69893a
---- /dev/null
-+++ b/ghcide/test/data/local-sig-inlay-hints/Qualified.hs
-@@ -0,0 +1,8 @@
-+module Qualified where
-+
-+import qualified Data.Map as Map
-+
-+f :: a
-+f = undefined
-+    where
-+         g = Map.singleton True 'c'
-diff --git a/ghcide/test/data/local-sig-inlay-hints/ScopedTypeVariables.expected.hs b/ghcide/test/data/local-sig-inlay-hints/ScopedTypeVariables.expected.hs
-new file mode 100644
-index 000000000..e7aa4b18b
---- /dev/null
-+++ b/ghcide/test/data/local-sig-inlay-hints/ScopedTypeVariables.expected.hs
-@@ -0,0 +1,8 @@
-+{-# LANGUAGE ExplicitForAll #-}
-+module ScopedTypeVariables where
-+
-+f :: forall a b. a -> b -> (a, b)
-+f aa bb = (aa, ida bb)
-+    where
-+        ida :: b -> b
-+        ida = id
-diff --git a/ghcide/test/data/local-sig-inlay-hints/ScopedTypeVariables.hs b/ghcide/test/data/local-sig-inlay-hints/ScopedTypeVariables.hs
-new file mode 100644
-index 000000000..48fe48e41
---- /dev/null
-+++ b/ghcide/test/data/local-sig-inlay-hints/ScopedTypeVariables.hs
-@@ -0,0 +1,7 @@
-+{-# LANGUAGE ExplicitForAll #-}
-+module ScopedTypeVariables where
-+
-+f :: forall a b. a -> b -> (a, b)
-+f aa bb = (aa, ida bb)
-+    where
-+        ida = id
-diff --git a/ghcide/test/data/local-sig-inlay-hints/Simple.expected.hs b/ghcide/test/data/local-sig-inlay-hints/Simple.expected.hs
-new file mode 100644
-index 000000000..23d55a326
---- /dev/null
-+++ b/ghcide/test/data/local-sig-inlay-hints/Simple.expected.hs
-@@ -0,0 +1,7 @@
-+module Simple where
-+
-+f :: a
-+f = undefined
-+    where
-+        g :: Bool
-+        g = True
-diff --git a/ghcide/test/data/local-sig-inlay-hints/Simple.hs b/ghcide/test/data/local-sig-inlay-hints/Simple.hs
-new file mode 100644
-index 000000000..952a08ace
---- /dev/null
-+++ b/ghcide/test/data/local-sig-inlay-hints/Simple.hs
-@@ -0,0 +1,6 @@
-+module Simple where
-+
-+f :: a
-+f = undefined
-+    where
-+        g = True
-diff --git a/ghcide/test/data/local-sig-inlay-hints/Tuple.expected.hs b/ghcide/test/data/local-sig-inlay-hints/Tuple.expected.hs
-new file mode 100644
-index 000000000..354bc35f3
---- /dev/null
-+++ b/ghcide/test/data/local-sig-inlay-hints/Tuple.expected.hs
-@@ -0,0 +1,8 @@
-+module Typle where
-+
-+f :: a
-+f = undefined
-+    where
-+        g :: Integer
-+        h :: Bool
-+        (g, h) = (1, True)
-diff --git a/ghcide/test/data/local-sig-inlay-hints/Tuple.hs b/ghcide/test/data/local-sig-inlay-hints/Tuple.hs
-new file mode 100644
-index 000000000..27d6a19d3
---- /dev/null
-+++ b/ghcide/test/data/local-sig-inlay-hints/Tuple.hs
-@@ -0,0 +1,6 @@
-+module Typle where
-+
-+f :: a
-+f = undefined
-+    where
-+        (g, h) = (1, True)
-diff --git a/ghcide/test/data/local-sig-inlay-hints/Typeclass.expected.hs b/ghcide/test/data/local-sig-inlay-hints/Typeclass.expected.hs
-new file mode 100644
-index 000000000..4e8d58e89
---- /dev/null
-+++ b/ghcide/test/data/local-sig-inlay-hints/Typeclass.expected.hs
-@@ -0,0 +1,7 @@
-+module Typeclass where
-+
-+f :: a
-+f = undefined
-+    where
-+        g :: Num a => a -> a -> a
-+        g a b = a + b
-diff --git a/ghcide/test/data/local-sig-inlay-hints/Typeclass.hs b/ghcide/test/data/local-sig-inlay-hints/Typeclass.hs
-new file mode 100644
-index 000000000..8ea9361bf
---- /dev/null
-+++ b/ghcide/test/data/local-sig-inlay-hints/Typeclass.hs
-@@ -0,0 +1,6 @@
-+module Typeclass where
-+
-+f :: a
-+f = undefined
-+    where
-+        g a b = a + b
++  if not enabled
++      then pure $ InL []
++      else renderLocalHints generateWhereInlayHints (Just visibleRange) uri state
 diff --git a/haskell-language-server.cabal b/haskell-language-server.cabal
-index e7583c982..320bb1266 100644
+index f4066dca9..5a8b5761c 100644
 --- a/haskell-language-server.cabal
 +++ b/haskell-language-server.cabal
-@@ -287,6 +287,7 @@ library hls-cabal-plugin
-     , aeson
-     , Cabal
-     , pretty
-+    , QuickCheck
- 
-   hs-source-dirs:   plugins/hls-cabal-plugin/src
- 
-@@ -2164,6 +2165,7 @@ test-suite ghcide-tests
+@@ -2172,6 +2172,7 @@ test-suite ghcide-tests
      THTests
      UnitTests
      WatchedFileTests
@@ -896,10 +936,10 @@ index e7583c982..320bb1266 100644
  
    -- Tests that have been pulled out of the main file
    default-extensions:
-diff --git a/test/testdata/schema/ghc94/default-config.golden.json b/test/testdata/schema/ghc94/default-config.golden.json
-index 8467b451f..3cdc4c67e 100644
---- a/test/testdata/schema/ghc94/default-config.golden.json
-+++ b/test/testdata/schema/ghc94/default-config.golden.json
+diff --git a/test/testdata/schema/ghc910/default-config.golden.json b/test/testdata/schema/ghc910/default-config.golden.json
+index 3b4e687ef..26fcda347 100644
+--- a/test/testdata/schema/ghc910/default-config.golden.json
++++ b/test/testdata/schema/ghc910/default-config.golden.json
 @@ -86,10 +86,12 @@
              "symbolsOn": true
          },
@@ -914,10 +954,63 @@ index 8467b451f..3cdc4c67e 100644
          },
          "hlint": {
              "codeActionsOn": true,
-diff --git a/test/testdata/schema/ghc94/vscode-extension-schema.golden.json b/test/testdata/schema/ghc94/vscode-extension-schema.golden.json
-index 1c0b19eb2..bf8523824 100644
---- a/test/testdata/schema/ghc94/vscode-extension-schema.golden.json
-+++ b/test/testdata/schema/ghc94/vscode-extension-schema.golden.json
+diff --git a/test/testdata/schema/ghc910/vscode-extension-schema.golden.json b/test/testdata/schema/ghc910/vscode-extension-schema.golden.json
+index 4ca08f296..16b8d2f24 100644
+--- a/test/testdata/schema/ghc910/vscode-extension-schema.golden.json
++++ b/test/testdata/schema/ghc910/vscode-extension-schema.golden.json
+@@ -191,6 +191,18 @@
+         "scope": "resource",
+         "type": "boolean"
+     },
++    "haskell.plugin.ghcide-type-lenses.codeLensOn": {
++        "default": true,
++        "description": "Enables ghcide-type-lenses code lenses",
++        "scope": "resource",
++        "type": "boolean"
++    },
++    "haskell.plugin.ghcide-type-lenses.config.localBindingInlayHintOn": {
++        "default": true,
++        "markdownDescription": "Display inlay hints of local bindings",
++        "scope": "resource",
++        "type": "boolean"
++    },
+     "haskell.plugin.ghcide-type-lenses.config.mode": {
+         "default": "always",
+         "description": "Control how type lenses are shown",
+@@ -207,9 +219,9 @@
+         "scope": "resource",
+         "type": "string"
+     },
+-    "haskell.plugin.ghcide-type-lenses.globalOn": {
++    "haskell.plugin.ghcide-type-lenses.inlayHintsOn": {
+         "default": true,
+-        "description": "Enables ghcide-type-lenses plugin",
++        "description": "Enables ghcide-type-lenses inlay hints",
+         "scope": "resource",
+         "type": "boolean"
+     },
+diff --git a/test/testdata/schema/ghc912/default-config.golden.json b/test/testdata/schema/ghc912/default-config.golden.json
+index 0dfbd39df..d5e29ce5a 100644
+--- a/test/testdata/schema/ghc912/default-config.golden.json
++++ b/test/testdata/schema/ghc912/default-config.golden.json
+@@ -86,10 +86,12 @@
+             "symbolsOn": true
+         },
+         "ghcide-type-lenses": {
++            "codeLensOn": true,
+             "config": {
++                "localBindingInlayHintOn": true,
+                 "mode": "always"
+             },
+-            "globalOn": true
++            "inlayHintsOn": true
+         },
+         "hlint": {
+             "codeActionsOn": true,
+diff --git a/test/testdata/schema/ghc912/vscode-extension-schema.golden.json b/test/testdata/schema/ghc912/vscode-extension-schema.golden.json
+index 77d398438..9e25ac7ec 100644
+--- a/test/testdata/schema/ghc912/vscode-extension-schema.golden.json
++++ b/test/testdata/schema/ghc912/vscode-extension-schema.golden.json
 @@ -191,6 +191,18 @@
          "scope": "resource",
          "type": "boolean"

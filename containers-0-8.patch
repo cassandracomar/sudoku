@@ -1,0 +1,11 @@
+diff --git a/pkgs/development/tools/haskell/hadrian/make-hadrian.nix b/pkgs/development/tools/haskell/hadrian/make-hadrian.nix
+index d2463865c199..e0e82e222ef3 100644
+--- a/pkgs/development/tools/haskell/hadrian/make-hadrian.nix
++++ b/pkgs/development/tools/haskell/hadrian/make-hadrian.nix
+@@ -65,5 +65,6 @@ callPackage' ./hadrian.nix (
+   // lib.optionalAttrs (lib.versionAtLeast ghcVersion "9.11") {
+     # See https://gitlab.haskell.org/ghc/ghc/-/commit/145a6477854d4003a07573d5e7ffa0c9a64ae29c
+     Cabal = bootPkgs.Cabal_3_14_2_0;
++    containers = bootPkgs.containers_0_8;
+   }
+ )

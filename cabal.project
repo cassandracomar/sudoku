@@ -1,16 +1,16 @@
-ignore-project: False
-profiling-detail: late-toplevel
+packages:
+    .
 library-stripping: True
 executable-stripping: True
 optimization: 2
 executable-profiling: False
 library-profiling: False
 profiling: False
-constraints: accelerate +debug
+profiling-detail: none
+allow-newer: all
 program-options
     ghc-options:
-                 -haddock
-                 -fllvm
+                 -- -fllvm
                  -funbox-strict-fields
                  -- inline aggressively to ensure lenses/polymorphic functions are fully saturated at concrete types
                  -- we're about 50% slower on the hot path when -fexpose-all-unfoldings, -fspecialise-aggressively,
@@ -20,21 +20,27 @@ program-options
                  -flate-specialise
                  -fpolymorphic-specialisation
                  -fstatic-argument-transformation
+                 -fspec-eval
+                 -fspec-eval-dictfun
+                 -- -flocal-float-out
+                 -- -flocal-float-out-top-level
                  -- giving the specializer more room to chug makes the generated core more closely match the
                  -- source program. or at least, I can read it more easily and recognize what's happening
                  -- where.
-                 -fmax-simplifier-iterations=16
-                 -fsimplifier-phases=8
-                 -fsimpl-tick-factor=200
-                 -funfolding-case-threshold=30
-                 -funfolding-case-scaling=200
-                 -funfolding-use-threshold=200
+                 -fmax-simplifier-iterations=96
+                 -fsimplifier-phases=32
+                 -fsimpl-tick-factor=1600
+                 -funfolding-case-threshold=120
+                 -funfolding-case-scaling=800
+                 -funfolding-use-threshold=800
+                 -funfolding-dict-discount=120
+                 -fmax-worker-args=20
                  -- results in a mild speedup, ~5%
                  -fworker-wrapper-cbv
                  -flate-dmd-anal
                  -fdmd-unbox-width=9
                  -fdicts-cheap
-                 -fkeep-auto-rules
+                 -- -fkeep-auto-rules
                  -fdo-clever-arg-eta-expansion
                  -Wno-missed-extra-shared-lib
                  -- -ddump-rules
@@ -48,8 +54,11 @@ program-options
                  -dsuppress-module-prefixes
                  -dsuppress-type-applications
                  -dsuppress-timestamps
+                 -dsuppress-ticks
                  -ddump-splices
-                 -- -fprof-auto
-                 -- -fprof-late-overloaded
-                 -- -rtsopts
-                 -- -threaded
+                 -- -fforce-recomp
+                 -rtsopts
+                 -- -fprof-late-overloaded-calls
+                 -- -fprof-cafs
+                 -threaded
+                 -fomit-yields

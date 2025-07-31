@@ -18,11 +18,11 @@ import Data.Monoid (Sum (Sum))
 import Data.Word (Word16)
 import Sudoku.Cell
 import Sudoku.Grid
+import Sudoku.Summaries ((>>>>))
 
 import Data.BitSet qualified as A.BS
 import Data.Set qualified as S
 import Data.Vector.Unboxed qualified as VU
-import Sudoku.Summaries ((>>>>))
 
 type Contradicted a = A.BS.BitSet Word16 a
 
@@ -42,6 +42,7 @@ runSudokuT ::
     (Monad m, MonadFail m) =>
     SolverOptions -> Grid a -> SudokuT (ReaderT SolverOptions (WriterT (BacktrackStateLog a) m)) a (Grid a) -> m (Grid a)
 runSudokuT opts = (A.BS.empty @Word16 @a,) >>> observeT >>>> flip runReaderT opts >>> runWriterT >>> fmap fst
+{-# INLINE runSudokuT #-}
 
 makeLenses ''BacktrackState
 

@@ -6,13 +6,14 @@ import Control.Monad (foldM, guard, unless, when)
 import Control.Monad.Fix (fix)
 import Control.Monad.RWS.Lazy (MonadState (put))
 import Data.Aeson (eitherDecodeStrict')
+import Data.Functor (($>))
 import Data.Maybe (fromMaybe)
 import Data.Word (Word16)
 import Sudoku.Backtracking (Contradicted, Sudoku, attemptToContradict, findRestrictedCells, runSudokuT)
 import Sudoku.Cell
 import Sudoku.Grid
 import Sudoku.Simplifiers
-import Sudoku.Summaries (checkSolved, ixSolved, summaryOf, (>>>>))
+import Sudoku.Summaries (ValueConstraint, checkSolved, ixSolved, summaryOf, (>>>>))
 import TextShow as TB (Builder, TextShow (showb, showbList), toLazyText, unlinesB)
 
 import Data.BitSet qualified as A.BS
@@ -20,57 +21,62 @@ import Data.ByteString qualified as BS
 import Data.Set qualified as S
 import Data.Vector.Unboxed qualified as VU
 
-type SolverConstraints a = (Show a, Ord a, Enum a, VU.Unbox a, VU.Unbox (Cell a))
+type SolverConstraints a = (Show a, Ord a, Enum a, VU.Unbox a, VU.Unbox a)
 
 printStep :: (SolverMonad m) => Simplify s a -> s a -> SimplifierResult s a -> m ()
 printStep (Simplify f _) = printStepImpl f
-
--- printStep (AccSimplifier f _) = printStepImpl f
+{-# INLINE printStep #-}
 
 printContradictions :: (SolverMonad m) => [TB.Builder] -> m ()
 printContradictions contras = printVerbose . toLazyText $ unlinesB ("Found Contradictions: " : contras)
+{-# INLINE printContradictions #-}
 
-runSimplifierOnce :: forall m. (SolverMonad m) => Simplify Grid Digit -> Grid Digit -> m (Grid Digit)
+runSimplifierOnce :: forall m a. (SolverMonad m, ValueConstraint a) => Simplify Grid a -> Grid a -> m (Grid a)
 runSimplifierOnce f g =
     ensure (const solveCheck) g <|> ensure (== g) g' <|> do
         when (null contras) $ printStep f g res
         unless (null contras) . printContradictions . fmap showb $ contras
-        guard (null contras)
-        return g'
+        guard (null contras) $> g'
   where
     res = runSimplifierPure f g
     contras = res ^. contradictionDescs
     solveCheck = fromMaybe False $ res ^? isSolvedRes
     g' = res ^. simplifierOutput & isSolved .~ solveCheck
+{-# INLINE runSimplifierOnce #-}
 
-solverCheckGridSolved :: Grid Digit -> Bool
+solverCheckGridSolved :: (ValueConstraint a) => Grid a -> Bool
 solverCheckGridSolved = checkSolved . summaryOf ixSolved
+{-# INLINE solverCheckGridSolved #-}
 
-runSimplifier :: forall m. (SolverMonad m) => Simplify Grid Digit -> m (Grid Digit) -> m (Grid Digit)
+runSimplifier :: forall m a. (SolverMonad m, ValueConstraint a) => Simplify Grid a -> m (Grid a) -> m (Grid a)
 runSimplifier f = fix $ \rec mg -> do
     g <- mg
     g' <- runSimplifierOnce f g
     ensure (== g) g' <|> rec (return g')
+{-# SPECIALIZE runSimplifier :: Simplify Grid Digit -> Sudoku Digit (Grid Digit) -> Sudoku Digit (Grid Digit) #-}
 
 {- | run each basic strategy in sequence, interleaving strategies that should be run in between every pair of steps.
 i.e. if we've marked some cells as `Known`, we should make sure that we remove impossible values from cells before
 running the next simplifier.
 -}
-runCheapSimplifiers :: forall m. (SolverMonad m) => m (Grid Digit) -> m (Grid Digit)
+runCheapSimplifiers :: forall m a. (SolverMonad m, ValueConstraint a) => m (Grid a) -> m (Grid a)
 runCheapSimplifiers = fix $ \rec mg -> do
     g <- mg
     g' <- foldM (flip runSimplifierOnce) g (orderSimplifiers cheapSimplifiers)
     ensure (== g) g' <|> rec (return g')
+{-# SPECIALIZE runCheapSimplifiers :: Sudoku Digit (Grid Digit) -> Sudoku Digit (Grid Digit) #-}
 
-runExpensiveSimplifier :: forall m. (SolverMonad m) => Simplify Grid Digit -> Grid Digit -> m (Grid Digit)
+runExpensiveSimplifier :: forall m a. (SolverMonad m, ValueConstraint a) => Simplify Grid a -> Grid a -> m (Grid a)
 runExpensiveSimplifier = runSimplifierOnce >>>> runCheapSimplifiers
+{-# SPECIALIZE runExpensiveSimplifier :: Simplify Grid Digit -> Grid Digit -> Sudoku Digit (Grid Digit) #-}
 
 -- | run each expensive strategy in sequence, interleaving strategies that should be run in between every pair of steps.
-runExpensiveSimplifiers :: forall m. (SolverMonad m) => m (Grid Digit) -> m (Grid Digit)
+runExpensiveSimplifiers :: forall m a. (SolverMonad m, ValueConstraint a) => m (Grid a) -> m (Grid a)
 runExpensiveSimplifiers = fix $ \rec mg -> do
     g <- mg
     g' <- foldM (flip runExpensiveSimplifier) g (orderSimplifiers expensiveSimplifiers)
     ensure (== g) g' <|> rec (return g')
+{-# SPECIALIZE runExpensiveSimplifiers :: Sudoku Digit (Grid Digit) -> Sudoku Digit (Grid Digit) #-}
 
 parseGrid :: String -> IO (Grid Digit)
 parseGrid file = do
@@ -108,10 +114,11 @@ the backtracking solver takes this to the next level and attempts to rule out ju
 from one `Cell`. there are apparently even harder puzzles than that which require the solver (human or machine) to eliminate values from single `Cell`s by
 trying all of the aforementioned strategies recursively just to eliminate a single possibility from a single `Cell`.
 -}
-runBasicSolver :: (SolverMonad m) => Grid Digit -> m (Grid Digit)
+runBasicSolver :: (SolverMonad m, ValueConstraint a) => Grid a -> m (Grid a)
 runBasicSolver g = do
     g' <- runCheapSimplifiers (return g)
     ensure (== g) g' <|> runExpensiveSimplifiers (return g')
+{-# SPECIALIZE runBasicSolver :: Grid Digit -> Sudoku Digit (Grid Digit) #-}
 
 printNotice :: (SolverMonad m) => [Builder] -> m ()
 printNotice ss = printVerbose . toLazyText $ unlinesB report
@@ -119,6 +126,7 @@ printNotice ss = printVerbose . toLazyText $ unlinesB report
     reportHeader = [dashRow, "NOTICE:"]
     reportFooter = [dashRow]
     report = reportHeader <> ss <> reportFooter
+{-# INLINE printNotice #-}
 
 printNoticeStart :: (SolverMonad m) => CellPos -> m ()
 printNoticeStart loc =
@@ -126,17 +134,20 @@ printNoticeStart loc =
         [ "using the backtracking solver to search for impossible values in " <> showLocB loc
         , "another attempt to solve logically will be made after we've eliminated impossibilities from this cell."
         ]
+{-# INLINE printNoticeStart #-}
 
-printNoticeEnd :: (SolverMonad m, TextShow a, Enum a) => CellPos -> Contradicted a -> m ()
+printNoticeEnd :: (SolverMonad m, ValueConstraint a) => CellPos -> Contradicted a -> m ()
 printNoticeEnd loc cs =
     printNotice
         [ "resuming logical solving with the knowledge that " <> showLocB loc <> " cannot be " <> showbList (A.BS.toList cs)
         ]
+{-# INLINE printNoticeEnd #-}
 
-reportSolved :: (SolverMonad m) => Grid Digit -> m ()
+reportSolved :: (SolverMonad m, ValueConstraint a) => Grid a -> m ()
 reportSolved g = when (solverCheckGridSolved g) (printQuiet . toLazyText . unlinesB $ report)
   where
     report = [dashRow, "Step: Solved!", "Final Grid:", showb g]
+{-# INLINE reportSolved #-}
 
 {- | use the basic solver until it fails to make progress, then try to prove what values cells cannot take. this uses
 backtracking to find contradictions. this solver may actually solve the puzzle while looking for contradictions.
@@ -170,7 +181,7 @@ TODO: there's more information available from `attemptToContradict` than we're a
       that we can write-in a few values for `Cell`s in such grids as we'll probably find some that take the same value,
       whatever the outcome.
 -}
-runBacktrackingSolver :: Sudoku Digit (Grid Digit) -> Sudoku Digit (Grid Digit)
+runBacktrackingSolver :: (ValueConstraint a) => Sudoku a (Grid a) -> Sudoku a (Grid a)
 runBacktrackingSolver mg = do
     g <- runBasicSolver =<< mg
     reportSolved g
@@ -184,7 +195,7 @@ runBacktrackingSolver mg = do
     applyUpdates loc cs = removePoss loc cs . addContra loc
     -- worker that first tries to find contradictions in a `Cell`, then reruns the basic solver after updating the grid to remove
     -- values the solver was able to prove resulted in contradictions.
-    go :: [CellPos] -> Grid Digit -> Sudoku Digit (Grid Digit)
+    go :: (ValueConstraint a) => [CellPos] -> Grid a -> Sudoku a (Grid a)
     go (loc : locs) g = do
         printNoticeStart loc
         put (A.BS.empty @Word16, g) >> attemptToContradict runCheapSimplifiers loc <|> return ()
@@ -194,14 +205,17 @@ runBacktrackingSolver mg = do
         g'' <- put (A.BS.empty @Word16, g') >> runBasicSolver g'
         ensure solverCheckGridSolved g'' <|> go locs g''
     go [] g = return g
+{-# SPECIALIZE runBacktrackingSolver :: Sudoku Digit (Grid Digit) -> Sudoku Digit (Grid Digit) #-}
 
-runBacktrackingSolver' :: Grid Digit -> Sudoku Digit (Grid Digit)
+runBacktrackingSolver' :: (ValueConstraint a) => Grid a -> Sudoku a (Grid a)
 runBacktrackingSolver' = runBacktrackingSolver . pure
+{-# SPECIALIZE runBacktrackingSolver' :: Grid Digit -> Sudoku Digit (Grid Digit) #-}
 
-displayStartNotice :: Grid Digit -> Sudoku Digit ()
+displayStartNotice :: (ValueConstraint a) => Grid a -> Sudoku a ()
 displayStartNotice = printQuiet . toLazyText . unlinesB . report
   where
     report g = [dashRow, "Step: Initial", "Starting Grid:", showb g]
+{-# INLINE displayStartNotice #-}
 
 -- | interface to the solver: run the backtracking solver and strip away the intervening monads such that we're left with an IO action.
 runSolver :: SolverOptions -> Grid Digit -> IO (Grid Digit)

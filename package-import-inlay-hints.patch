@@ -1,5 +1,5 @@
 diff --git a/plugins/hls-explicit-imports-plugin/src/Ide/Plugin/ExplicitImports.hs b/plugins/hls-explicit-imports-plugin/src/Ide/Plugin/ExplicitImports.hs
-index f24f84947..6bbb4a29f 100644
+index 17634491f..7543ed3d0 100644
 --- a/plugins/hls-explicit-imports-plugin/src/Ide/Plugin/ExplicitImports.hs
 +++ b/plugins/hls-explicit-imports-plugin/src/Ide/Plugin/ExplicitImports.hs
 @@ -16,7 +16,8 @@ module Ide.Plugin.ExplicitImports

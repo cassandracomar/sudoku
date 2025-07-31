@@ -61,6 +61,7 @@ is enabled or not.
 -}
 printQuiet :: (SolverMonad m) => Text -> m ()
 printQuiet = guarded (view testNoLog <&> not) . (liftIO . T.putStrLn)
+{-# INLINE printQuiet #-}
 
 checkVerbosity :: (SolverMonad m) => m Bool
 checkVerbosity = view verbose
@@ -68,6 +69,7 @@ checkVerbosity = view verbose
 
 printVerbose :: (SolverMonad m) => Text -> m ()
 printVerbose t = guarded checkVerbosity (printQuiet t)
+{-# INLINE printVerbose #-}
 
 type RowIx = Word8
 
@@ -181,11 +183,11 @@ instance (TextShow a) => Show (CommonPossibilities a) where
 type PartitionedPossibilities a = [CommonPossibilities a]
 
 data Grid a = Grid
-    { _grid :: !(VU.Vector (Cell a))
-    , _rules :: !Rules
-    , _knownTuples :: !(S.Set (CommonPossibilities a))
-    , _contradictionSearched :: !(S.Set CellPos)
-    , _isSolved :: !Bool
+    { _grid :: {-# UNPACK #-} !(VU.Vector (Cell a))
+    , _rules :: {-# UNPACK #-} !Rules
+    , _knownTuples :: {-# UNPACK #-} !(S.Set (CommonPossibilities a))
+    , _contradictionSearched :: {-# UNPACK #-} !(S.Set CellPos)
+    , _isSolved :: {-# UNPACK #-} !Bool
     }
     deriving (Generic)
 
