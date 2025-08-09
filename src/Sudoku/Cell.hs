@@ -1,6 +1,7 @@
 {-# LANGUAGE ExtendedLiterals #-}
 {-# LANGUAGE MagicHash #-}
 {-# LANGUAGE PatternSynonyms #-}
+{-# LANGUAGE Strict #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE UnboxedTuples #-}
@@ -15,6 +16,7 @@ import Data.Aeson (FromJSON, ToJSON (toEncoding))
 import Data.Aeson.Types (FromJSON (parseJSON), ToJSON (toJSON))
 import Data.Bits (Bits ((.|.)), testBit, (!<<.), (!>>.))
 import Data.Foldable (fold)
+import Data.Hashable (Hashable)
 import Data.List (intersperse)
 import Data.Primitive (Prim (..))
 import Data.Proxy (Proxy (..))
@@ -23,6 +25,7 @@ import Data.Vector.Unboxed (IsoUnbox (..))
 import Data.Word (Word16, Word8)
 import GHC.Generics (Generic)
 import GHC.Word (Word16 (..))
+import Numeric.QuoteQuot (quoteQuot, quoteRem)
 import TextShow (Builder, TextShow (..), toString)
 import TextShow.Data.Char (showbLitChar)
 
@@ -35,6 +38,8 @@ import Data.Vector.Unboxed.Mutable qualified as MVU
 
 data Digit = One | Two | Three | Four | Five | Six | Seven | Eight | Nine
     deriving (Ord, Eq, Generic)
+
+instance Hashable Digit
 
 instance Enum Digit where
     toEnum = intToDigit
@@ -134,11 +139,6 @@ instance TextShow Digit where
 
 instance Show Digit where
     show = toString . showb
-
-bsfolded ::
-    (Enum a, Enum a', Bits b, Num b, Contravariant f, Applicative f) => LensLike f (A.BS.BitSet b a) (A.BS.BitSet b a') a a'
-bsfolded = foldring A.BS.foldr
-{-# INLINE bsfolded #-}
 
 type role CellSet phantom
 
@@ -244,44 +244,68 @@ mkKnown :: (VU.IsoUnbox a Word16) => a -> Cell a
 mkKnown = KnownRepr . toURepr
 
 boxNumber :: Word8 -> Word8 -> Word8
-boxNumber !r !c = (r - 1) `div` 3 * 3 + (c - 1) `div` 3 + 1
+boxNumber !r !c = quot3 (r - 1) * 3 + quot3 (c - 1) + 1
+{-# INLINE boxNumber #-}
 
 rowColumn :: Int -> CellPos
 rowColumn !i = (r, c, b)
   where
-    !r = fromIntegral $! i `div` 9 + 1
-    !c = fromIntegral $! i `rem` 9 + 1
+    !r = fromIntegral $! quot9 i + 1
+    !c = fromIntegral $! rem9 i + 1
     !b = boxNumber r c
+{-# INLINE rowColumn #-}
 
 vindex :: CellPos -> Int
 vindex (!r, !c, _) = fromIntegral $! (r - 1) * 9 + c - 1
+{-# INLINE vindex #-}
 
 cellIndex :: Iso' Int CellPos
 cellIndex = iso rowColumn vindex
 {-# INLINE cellIndex #-}
 
-cellPos :: (VU.Unbox a, VU.Unbox b) => IndexedTraversal CellPos (VU.Vector a) (VU.Vector b) a b
-cellPos = reindexed (view cellIndex) vectorTraverse
-{-# INLINE cellPos #-}
+cells :: (VU.Unbox a, VU.Unbox b) => IndexedTraversal CellPos (VU.Vector a) (VU.Vector b) a b
+cells = reindexed rowColumn vectorTraverse
+{-# INLINE cells #-}
 
 boxIndex :: CellPos -> Word8
-boxIndex (!r, !c, _) = (r - 1) `rem` 3 * 3 + (c - 1) `rem` 3 + 1
+boxIndex (!r, !c, _) = rem3 (r - 1) * 3 + rem3 (c - 1) + 1
+{-# INLINE boxIndex #-}
 
 withBoxIndex :: Iso' CellPos (Word8, Word8, Word8, Word8)
 withBoxIndex = iso (\(r, c, b) -> (r, c, b, boxIndex (r, c, b))) (\(r, c, b, _) -> (r, c, b))
+{-# INLINE withBoxIndex #-}
+
+quot3 :: Word8 -> Word8
+quot3 = $$(quoteQuot 3)
+{-# INLINE quot3 #-}
+
+quot9 :: Int -> Int
+quot9 = $$(quoteQuot 9)
+{-# INLINE quot9 #-}
+
+rem3 :: Word8 -> Word8
+rem3 = $$(quoteRem 3)
+{-# INLINE rem3 #-}
+
+rem9 :: Int -> Int
+rem9 = $$(quoteRem 9)
+{-# INLINE rem9 #-}
 
 boxIndexing :: Iso' CellPos (Word8, Word8)
 boxIndexing =
     iso
         (\loc@(_, _, b) -> (b, boxIndex loc))
         ( \(b, offset) ->
-            ( (b - 1) `div` 3 * 3 + (offset - 1) `div` 3 + 1
-            , ((b - 1) `rem` 3) * 3 + (offset - 1) `rem` 3 + 1
+            ( quot3 (b - 1) * 3 + quot3 (offset - 1) + 1
+            , rem3 (b - 1) * 3 + rem3 (offset - 1) + 1
             , b
             )
         )
+{-# INLINE boxIndexing #-}
 
 data RegionIndicator = Row | Column | Box deriving (Eq, Ord, Generic, Enum)
+
+instance Hashable RegionIndicator
 
 instance TextShow RegionIndicator where
     showb Row = "Row"
@@ -295,14 +319,17 @@ majorMinor :: RegionIndicator -> CellPos -> (RegionIndicator, Int, Int)
 majorMinor Row (!r, !c, _) = (Row, fromIntegral r, fromIntegral c)
 majorMinor Column (!r, !c, _) = (Column, fromIntegral c, fromIntegral r)
 majorMinor Box loc@(_, _, !b) = (Box, fromIntegral b, fromIntegral (boxIndex loc))
+{-# INLINE majorMinor #-}
 
 fromMajorMinor :: (RegionIndicator, Int, Int) -> (RegionIndicator, CellPos)
 fromMajorMinor (Row, !row, !col) = (Row, (fromIntegral row, fromIntegral col, boxNumber (fromIntegral row) (fromIntegral col)))
 fromMajorMinor (Column, !col, !row) = (Column, (fromIntegral row, fromIntegral col, boxNumber (fromIntegral row) (fromIntegral col)))
 fromMajorMinor (Box, !box, !boxIdx) = (Box, (fromIntegral box, fromIntegral boxIdx) ^. re boxIndexing)
+{-# INLINE fromMajorMinor #-}
 
 _majorMinor :: Iso' (RegionIndicator, CellPos) (RegionIndicator, Int, Int)
 _majorMinor = iso (uncurry majorMinor) fromMajorMinor
+{-# INLINE _majorMinor #-}
 
 makeLenses ''CellSet
 makePrisms ''CellSet

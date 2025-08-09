@@ -8,18 +8,19 @@ import Control.Lens
 import Control.Monad (guard)
 import Control.Monad.Fix (fix)
 import Control.Monad.Logic (observeAll, observeMany)
+import Data.BitSet (bsfolded)
 import Data.Containers.ListUtils (nubOrd)
 import Data.Foldable
 import Data.List (sort, sortBy)
 import Data.Maybe (fromMaybe)
 import Data.Set.Lens
 import Data.Word (Word16)
+import GHC.Word (Word8)
 import Sudoku.Cell (
     Cell (Possibly),
     CellPos,
     CellSet (CellSet),
     RegionIndicator (..),
-    bsfolded,
     _CellSet,
     _Known,
     _Possibly,
@@ -31,8 +32,8 @@ import Sudoku.Summaries (
     RegionSummaries,
     applySummary,
     byRegion,
+    iconstantly,
     ixSummary,
-    riToLens,
  )
 import TextShow (TextShow)
 
@@ -65,19 +66,21 @@ instance (Enum a, Ord a) => Semigroup (DigitPartitions a) where
 instance (Enum a, Ord a) => Monoid (DigitPartitions a) where
     mempty = DigitPartitions mempty
 
-cellPartitionSingleton :: (Enum a, Ord a) => CellPos -> Cell a -> Maybe (CellPos, CellPartitions a)
-cellPartitionSingleton loc cell@(Possibly (CellSet cs)) = Just (loc, CellPartitions [CommonPossibilities (S.singleton (loc, cell)) (S.fromList $ A.BS.toList cs)])
+cellPartitionSingleton :: (Enum a, Ord a) => CellPos -> Cell a -> Maybe (CellPartitions a)
+cellPartitionSingleton loc cell@(Possibly (CellSet cs)) = Just (CellPartitions [CommonPossibilities (S.singleton (loc, cell)) (S.fromList $ A.BS.toList cs)])
 cellPartitionSingleton _ _ = Nothing
 
 digitPartitionsFor :: (Enum a, Ord a) => CellPos -> Cell a -> [DigitPartitions a]
 digitPartitionsFor loc cell@(Possibly (CellSet cs)) = (\d -> DigitPartitions [CommonPossibilities (S.singleton (loc, cell)) (S.singleton d)]) <$> A.BS.toList cs
 digitPartitionsFor _ _ = []
 
-cellPartitions :: (Enum a, Ord a) => IndexedFold CellPos (CellPos, Cell a) (CellPartitions a)
-cellPartitions = ifolding (uncurry cellPartitionSingleton)
+cellPartitions ::
+    (Enum a, Ord a) => IndexedFold CellPos (CellPos, Cell a) (RegionIndicator -> Word8 -> CellPartitions a)
+cellPartitions = iconstantly $ ifolding (\(loc, cell) -> Identity (loc, foldOf _Just $ cellPartitionSingleton loc cell))
 
-digitPartitions :: (Enum a, Ord a) => IndexedFold CellPos (CellPos, Cell a) (DigitPartitions a)
-digitPartitions = ifolding (\(loc, cell) -> Just (loc, fold $ digitPartitionsFor loc cell))
+digitPartitions ::
+    (Enum a, Ord a) => IndexedFold CellPos (CellPos, Cell a) (RegionIndicator -> Word8 -> DigitPartitions a)
+digitPartitions = iconstantly $ ifolding (\(loc, cell) -> Just (loc, fold $ digitPartitionsFor loc cell))
 
 cellUpdateFromPartitions ::
     (Ord a, Enum a) =>
@@ -90,7 +93,7 @@ cellUpdateFromPartitions sel pos summs =
         (A.BS.fromList . S.toList)
         (S.fromList (newTuplesAt pos summs) S.\\ inSet pos summs)
   where
-    findTuples ri i s = s ^. riToLens ri . ixSummary i . sel
+    findTuples ri i s = s ^. ix ri . ixSummary i . sel
     newTuplesAt (r, c, b) s = findTuples Row r s <> findTuples Column c s <> findTuples Box b s
     checkCellInTuple loc = S.member loc . view (commonCells . to (S.map fst))
     inSet loc s = S.fromList . filter (checkCellInTuple loc) $ newTuplesAt loc s
@@ -108,7 +111,7 @@ mergePartitionsAcross ::
     -> S.Set (CommonPossibilities a)
     -> RegionSummaries s
     -> RegionSummaries s
-mergePartitionsAcross sel ri kts = riToLens ri . byRegion %~ V.map (partitionMerge sel kts)
+mergePartitionsAcross sel ri kts = ix ri . byRegion %~ V.map (partitionMerge sel kts)
 
 mergePartitionsInSummary ::
     (Ord a, TextShow a) =>
@@ -118,7 +121,7 @@ mergePartitionsInSummary sel kts = mergePartitionsAcross sel Row kts . mergePart
 calculateNewTuplesAcross ::
     (Ord a, Show a) =>
     Lens' s [CommonPossibilities a] -> RegionIndicator -> RegionSummaries s -> S.Set (CommonPossibilities a)
-calculateNewTuplesAcross sel ri = foldMapOf (riToLens ri . byRegion . folded . sel) S.fromList
+calculateNewTuplesAcross sel ri = foldMapOf (ix ri . byRegion . folded . sel) S.fromList
 
 applyPartitions ::
     forall s a.

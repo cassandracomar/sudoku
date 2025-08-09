@@ -310,7 +310,7 @@
               graphviz = inputs.nixpkgs.legacyPackages.${system}.graphviz;
             };
             mkShellArgs = {
-              # packages = with pkgs.llvmPackages_16; [libllvm libllvm.dev libllvm.lib];
+              packages = with pkgs.llvmPackages; [libllvm libllvm.dev libllvm.lib llvm];
               # shellHook = ''
               #   export LD="${pkgs.llvmPackages_16.libcxxStdenv.cc}/bin/clang"
               # '';
@@ -321,7 +321,7 @@
         packages.ghc912 = ghc;
         # packages.llvm-hs = config.haskellProjects.ghc912.outputs.finalPackages.llvm-hs;
         packages.stdenv = pkgs.stdenv;
-        # packages.libllvm = pkgs.llvmPackages_16.libllvm;
+        packages.llvm = pkgs.llvmPackages.llvm;
 
         packages.default = self'.packages.sudoku;
         formatter = inputs.nixpkgs.legacyPackages.${system}.alejandra;

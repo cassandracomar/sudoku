@@ -8,16 +8,19 @@ import Control.Monad.RWS.Lazy (MonadState (put))
 import Data.Aeson (eitherDecodeStrict')
 import Data.Functor (($>))
 import Data.Maybe (fromMaybe)
+import Data.Utils ((>>>>))
 import Data.Word (Word16)
 import Sudoku.Backtracking (Contradicted, Sudoku, attemptToContradict, findRestrictedCells, runSudokuT)
 import Sudoku.Cell
 import Sudoku.Grid
 import Sudoku.Simplifiers
-import Sudoku.Summaries (ValueConstraint, checkSolved, ixSolved, summaryOf, (>>>>))
+import Sudoku.Summaries (ValueConstraint, checkSolved, solved, summaryOf)
 import TextShow as TB (Builder, TextShow (showb, showbList), toLazyText, unlinesB)
 
 import Data.BitSet qualified as A.BS
 import Data.ByteString qualified as BS
+import Data.Foldable qualified as F
+import Data.List qualified as L
 import Data.Set qualified as S
 import Data.Vector.Unboxed qualified as VU
 
@@ -35,7 +38,7 @@ runSimplifierOnce :: forall m a. (SolverMonad m, ValueConstraint a) => Simplify 
 runSimplifierOnce f g =
     ensure (const solveCheck) g <|> ensure (== g) g' <|> do
         when (null contras) $ printStep f g res
-        unless (null contras) . printContradictions . fmap showb $ contras
+        unless (null contras) . printContradictions $ F.foldMap' (L.singleton . showb) contras
         guard (null contras) $> g'
   where
     res = runSimplifierPure f g
@@ -45,7 +48,7 @@ runSimplifierOnce f g =
 {-# INLINE runSimplifierOnce #-}
 
 solverCheckGridSolved :: (ValueConstraint a) => Grid a -> Bool
-solverCheckGridSolved = checkSolved . summaryOf ixSolved
+solverCheckGridSolved = checkSolved . summaryOf (grid . cells . withIndex . solved)
 {-# INLINE solverCheckGridSolved #-}
 
 runSimplifier :: forall m a. (SolverMonad m, ValueConstraint a) => Simplify Grid a -> m (Grid a) -> m (Grid a)

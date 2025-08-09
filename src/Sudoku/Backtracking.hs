@@ -13,12 +13,13 @@ import Control.Monad.Reader (ReaderT (runReaderT))
 import Control.Monad.Trans (lift)
 import Control.Monad.Trans.Writer.Lazy (WriterT (runWriterT))
 import Control.Monad.TransLogicState.Class (observeT)
+import Data.BitSet (bsfolded)
 import Data.List (sortBy)
 import Data.Monoid (Sum (Sum))
+import Data.Utils ((>>>>))
 import Data.Word (Word16)
 import Sudoku.Cell
 import Sudoku.Grid
-import Sudoku.Summaries ((>>>>))
 
 import Data.BitSet qualified as A.BS
 import Data.Set qualified as S
@@ -79,7 +80,7 @@ restrictionScore g (loc, cell) = Restriction (Sum (restrictionScoreCell cell)) (
 findRestrictedCells :: (Ord a, Enum a, VU.Unbox (Cell a)) => Grid a -> [(CellPos, Cell a)]
 findRestrictedCells g =
     sortBy restrictionOrdering $
-        g ^@.. grid . cellPos . indices (not . flip S.member (_contradictionSearched g)) . filtered (has _Possibly)
+        g ^@.. grid . cells . indices (not . flip S.member (_contradictionSearched g)) . filtered (has _Possibly)
   where
     restrictionOrdering a b = restrictionScore g a `compare` restrictionScore g b
 {-# INLINE findRestrictedCells #-}

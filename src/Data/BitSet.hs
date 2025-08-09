@@ -1,11 +1,10 @@
-{-# LANGUAGE BangPatterns #-}
-{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE ExtendedLiterals #-}
 {-# LANGUAGE FlexibleInstances #-}
--- {-# LANGUAGE PatternSynonyms #-}
-{-# LANGUAGE TypeAbstractions #-}
-{-# LANGUAGE TypeFamilies #-}
-{-# LANGUAGE UndecidableInstances #-}
-{-# OPTIONS_HADDOCK hide #-}
+{-# LANGUAGE MagicHash #-}
+{-# LANGUAGE Strict #-}
+{-# LANGUAGE UnboxedTuples #-}
+{-# OPTIONS_GHC -Wno-inline-rule-shadowing #-}
+{-# OPTIONS_GHC -Wno-orphans #-}
 
 {- |
 Module      : Data.BitSet
@@ -21,28 +20,46 @@ module Data.BitSet where
 -- foldl' is exported by Prelude from GHC 9.10
 
 import Control.DeepSeq (NFData)
+import Control.Lens hiding (ifoldr)
 import Data.Bits
+import Data.Coerce (coerce)
 import GHC.Base (Type)
-import GHC.Exts (IsList, build)
-import GHC.Generics (Generic)
+import GHC.Generics
 import Prelude hiding (foldl, foldl', foldr)
 
--- import Data.Array.Accelerate qualified as A
--- import Data.Array.Accelerate.Data.Bits qualified as A
 import Data.List qualified as List
+import Data.Vector.Generic qualified as VG
+import Data.Vector.Generic.Mutable qualified as MVG
+import Data.Vector.Primitive qualified as VP
+import Data.Vector.Unboxed qualified as VU
+import Data.Vector.Unboxed.Mutable qualified as MVU
 import GHC.Exts qualified as Exts
 
 {- | A space-efficient implementation of a set data structure for
 enumerated data types.
 -}
 newtype BitSet c a = BitSet {getBits :: c}
-    deriving (Eq, Ord)
+    deriving (Eq, Ord, VP.Prim)
 
 type role BitSet representational phantom
 
 instance (NFData c) => NFData (BitSet c a)
 
 deriving instance Generic (BitSet c a)
+
+instance (VU.Unbox c, Generic c) => VU.IsoUnbox (BitSet c a) c where
+    toURepr = coerce
+    fromURepr = coerce
+
+newtype instance VU.MVector s (BitSet c a) = MV_BitSet (VP.MVector s c)
+
+newtype instance VU.Vector (BitSet c a) = V_BitSet (VP.Vector c)
+
+deriving via (VU.UnboxViaPrim c) instance (VP.Prim c) => MVG.MVector MVU.MVector (BitSet c a)
+
+deriving via (VU.UnboxViaPrim c) instance (VP.Prim c) => VG.Vector VU.Vector (BitSet c a)
+
+instance (VP.Prim c) => VU.Unbox (BitSet c a)
 
 instance (Enum a, Show a, Bits c, Num c) => Show (BitSet c a) where
     showsPrec p bs =
@@ -55,23 +72,12 @@ instance (Bits c) => Semigroup (BitSet c a) where
 instance (Bits c, Num c) => Monoid (BitSet c a) where
     mempty = empty
 
-instance (Enum a, Bits c, Num c) => IsList (BitSet c (a :: Type)) where
+instance (Enum a, Bits c, Num c) => Exts.IsList (BitSet c (a :: Type)) where
     type Item (BitSet c a) = a
     fromList = fromList
     toList = toList
     {-# INLINE fromList #-}
     {-# INLINE toList #-}
-
--- instance (A.Elt c) => A.Elt (BitSet c a)
-
--- pattern BitSet_ :: (A.Elt c) => A.Exp c -> A.Exp (BitSet c a)
--- pattern BitSet_ bs = A.Pattern bs
-
--- {-# COMPLETE BitSet_ #-}
-
--- instance (A.Lift A.Exp c, A.Elt (A.Plain c)) => A.Lift A.Exp (BitSet c a) where
---     type Plain (BitSet c a) = BitSet (A.Plain c) a
---     lift (BitSet bs) = BitSet_ (A.lift bs)
 
 -- | Is the bit set empty?
 {-# INLINE null #-}
@@ -130,14 +136,6 @@ infix 5 \\ -- comment to fool cpp: https://downloads.haskell.org/~ghc/latest/doc
 intersection :: (Bits c) => BitSet c a -> BitSet c a -> BitSet c a
 intersection (BitSet !bits1) (BitSet !bits2) = BitSet $! bits1 .&. bits2
 
-{- | The intersection of two bit sets.
-{\-# INLINE intersection_ #-\}
-intersection_ :: (A.Bits c) => A.Exp (BitSet c a) -> A.Exp (BitSet c a) -> A.Exp (BitSet c a)
-intersection_ = A.match \case
-    (BitSet_ bits1) -> A.match \case
-        (BitSet_ bits2) -> BitSet_ $! bits1 A..&. bits2
--}
-
 {- | Transform this bit set by applying a function to every value.
 Resulting bit set may be smaller then the original.
 -}
@@ -176,6 +174,19 @@ foldr f z (BitSet bits) = go (popCount bits) 0
 {- | Reduce this bit set by applying a binary function to all elements,
 using the given starting value.
 -}
+{-# INLINE ifoldr #-}
+ifoldr :: (Enum a, Bits c) => (Int -> a -> b -> b) -> b -> BitSet c a -> b
+ifoldr f z (BitSet bits) = go (popCount bits) 0
+  where
+    go 0 !_ = z
+    go !n !b =
+        if bits `testBit` b
+            then f b (toEnum b) (go (pred n) (succ b))
+            else go n (succ b)
+
+{- | Reduce this bit set by applying a binary function to all elements,
+using the given starting value.
+-}
 {-# INLINE foldrIndex #-}
 foldrIndex :: (Enum a, Bits c) => (Int -> b -> b) -> b -> BitSet c a -> b
 foldrIndex f z (BitSet bits) = go (popCount bits) 0
@@ -186,24 +197,16 @@ foldrIndex f z (BitSet bits) = go (popCount bits) 0
             then b `f` go (pred n) (succ b)
             else go n (succ b)
 
--- class IsIntegralExp c a where
---     fromRepr :: (A.HasCallStack) => A.Exp c -> A.Exp a
---     toRepr :: (A.HasCallStack) => A.Exp a -> A.Exp c
-
 first :: forall a c. (Enum a, Bounded a, FiniteBits c, Bits c) => BitSet c a -> Maybe a
-first = fmap toEnum . firstIndex
-{-# INLINE first #-}
-
-firstIndex :: forall a c. (Enum a, Bounded a, FiniteBits c, Bits c) => BitSet c a -> Maybe Int
-firstIndex (BitSet !bits) =
+first (BitSet !bits) =
     let !count = countTrailingZeros bits
-    in if count <= fromEnum (maxBound @a) then Just count else Nothing
-{-# INLINE firstIndex #-}
+    in if count <= fromEnum (maxBound @a) then Just (toEnum count) else Nothing
+{-# INLINE first #-}
 
 -- | Convert this bit set set to a list of elements.
 {-# INLINE [0] toList #-}
 toList :: (Enum a, Bits c, Num c) => BitSet c a -> [a]
-toList bs = build (\k z -> foldr k z bs)
+toList bs = Exts.build (\k z -> foldr k z bs)
 
 -- | Make a bit set from a list of elements.
 {-# INLINE [0] fromList #-}
@@ -213,4 +216,18 @@ fromList xs = BitSet $! List.foldl' (\i x -> i `setBit` fromEnum x) 0 xs
 {-# RULES
 "fromList/toList" forall bs. fromList (toList bs) = bs
 "toList/fromList" forall bs. toList (fromList bs) = bs
+"shiftL/shiftR" forall c r.
+    Exts.uncheckedShiftL# (Exts.uncheckedShiftRL# (Exts.word16ToWord# c) r) r =
+        Exts.word16ToWord# c
+"unnecessaryAnd/Word16" forall c. Exts.and# c 65535## = c
+"unnecessaryAnd/Word8" forall c. Exts.and# c 255## = c
     #-}
+
+bsfolded ::
+    (Enum a, Enum a', Bits b, Num b, Contravariant f, Applicative f) =>
+    IndexedLensLike Int f (BitSet b a) (BitSet b a') a a'
+bsfolded = ifoldring ifoldr
+{-# INLINE bsfolded #-}
+
+bitSetOf :: (Num c, Enum a, Bits c) => Fold s a -> s -> BitSet c a
+bitSetOf f = foldlOf' f (flip insert) empty

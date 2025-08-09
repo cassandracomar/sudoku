@@ -11,6 +11,8 @@ import Data.Kind (Type)
 import Data.List (intercalate)
 import Data.Monoid (Sum)
 import Data.Text.Lazy (Text)
+import Data.Word (Word16)
+import Foreign (Word8)
 import Sudoku.Cell
 import Sudoku.Grid (
     Grid,
@@ -61,13 +63,17 @@ import Sudoku.Tuples (
  )
 import TextShow (Builder, TextShow (showb), toLazyText, unlinesB)
 
-import Data.Map.Monoidal.Strict qualified as M
+import Data.HashSet qualified as HS
+import Data.IntMap.Monoidal qualified as M
 import Data.Text.Lazy.IO qualified as T
 import Data.Vector.Unboxed qualified as VU
 
 data SimplifierResult s a
     = Contradicted
-        {_simplifierOutput :: !(s a), _contradictionDescs :: [ContradictionDesc Int a], _explanations :: [ExplainDesc a]}
+        { _simplifierOutput :: !(s a)
+        , _contradictionDescs :: !(HS.HashSet (ContradictionDesc Int a))
+        , _explanations :: [ExplainDesc a]
+        }
     | Successful {_simplifierOutput :: !(s a), _explanations :: [ExplainDesc a], _isSolvedRes :: !Bool}
 
 makeClassy ''SimplifierResult
@@ -84,7 +90,7 @@ class (VU.Unbox a, Enum a, Ord a, TextShow a) => Simplifier f (s :: Type -> Type
     explain :: (TextShow a) => f -> s a -> RegionSummaries (MonoidFor f a) -> [ExplainDesc a]
 
     -- | collect a monoidal summary for this step -- this summary will be collated into `RegionSummaries` and provided to `simplify`
-    summarize :: f -> Fold (CellPos, Cell a) (MonoidFor f a)
+    summarize :: f -> Fold (CellPos, Cell a) (RegionIndicator -> Word8 -> MonoidFor f a)
 
     -- | friendly description of this simplifier's algorithm
     simplifierName :: f -> Builder
@@ -170,11 +176,11 @@ mkSimplify = Simplify <*> fullSimplifyStep
 
 collectSummaries ::
     forall f (s :: Type -> Type) a. (SimplifierConstraint f s a) => f -> s a -> Summary (MonoidFor f a) a
-collectSummaries f = summarizeWithContradictions (gridLens f . cellPos) (summarize @_ @s f)
+collectSummaries f = summarizeWithContradictions (gridLens f . cells) (summarize @_ @s f)
 
 fullSimplifyStep :: forall f s a. (SimplifierConstraint f s a) => f -> s a -> SimplifierResult s a
 fullSimplifyStep f g
-    | null detectedContras = Successful g' exps (checkSolved solvedSumms)
+    | HS.null detectedContras = Successful g' exps isSolved
     | otherwise = Contradicted g' detectedContras exps
   where
     (!contras, !solvedSumms, !summs) = collectSummaries f g
@@ -182,6 +188,7 @@ fullSimplifyStep f g
     !g' = simplify f summs' g
     exps = explain f g' summs'
     !detectedContras = testForContradictions contras
+    !isSolved = checkSolved solvedSumms
 
 instance (ValueConstraint a) => Simplifier SimplifyKnowns Grid a where
     type MonoidFor SimplifyKnowns a = Union (CellSet a)
@@ -189,38 +196,32 @@ instance (ValueConstraint a) => Simplifier SimplifyKnowns Grid a where
     simplify _ = applySummary updateFromKnowns grid
     {-# INLINE simplify #-}
     explain _ _ = explainSummary explainKnowns
-    {-# SPECIALIZE NOINLINE explain ::
-        SimplifyKnowns -> Grid Digit -> RegionSummaries (MonoidFor SimplifyKnowns Digit) -> [ExplainDesc Digit]
-        #-}
-    summarize _ = _2 . knowns
+    {-# NOINLINE explain #-}
+    summarize _ = knowns
     {-# INLINE summarize #-}
     simplifierName _ = "Remove Knowns from possible cell values"
 
 instance (ValueConstraint a) => Simplifier SimplifyNakedSingles Grid a where
-    type MonoidFor SimplifyNakedSingles a = [(CellPos, a)]
+    type MonoidFor SimplifyNakedSingles a = Union (CellSet a)
 
     simplify _ = applySummary updateFromNakedSingles grid
     {-# INLINE simplify #-}
     explain _ _ = explainSummary explainNakedSingles
-    {-# SPECIALIZE NOINLINE explain ::
-        SimplifyNakedSingles -> Grid Digit -> RegionSummaries (MonoidFor SimplifyNakedSingles Digit) -> [ExplainDesc Digit]
-        #-}
+    {-# NOINLINE explain #-}
     summarize _ = singlePossibility
     {-# INLINE summarize #-}
     simplifierName _ = "(Naked Single) Set cells with just one option to Known"
 
 instance (ValueConstraint a) => Simplifier SimplifyHiddenSingles Grid a where
-    type MonoidFor SimplifyHiddenSingles a = M.MonoidalMap a (Sum Int)
+    type MonoidFor SimplifyHiddenSingles a = M.MonoidalIntMap (Sum Word16)
     updateSummaries _ _ = filterSummariesByCount 1
     {-# INLINE updateSummaries #-}
 
     simplify _ = applySummary updateFromHiddenSingles grid
     {-# INLINE simplify #-}
     explain _ _ = explainSummary explainHiddenSingles
-    {-# SPECIALIZE NOINLINE explain ::
-        SimplifyHiddenSingles -> Grid Digit -> RegionSummaries (MonoidFor SimplifyHiddenSingles Digit) -> [ExplainDesc Digit]
-        #-}
-    summarize _ = _2 . countedPoss
+    {-# NOINLINE explain #-}
+    summarize _ = countedPoss
     {-# INLINE summarize #-}
     simplifierName _ = "(Hidden Single) Place digit with just one location"
 
@@ -240,9 +241,7 @@ instance (ValueConstraint a) => Simplifier SimplifyCellTuples Grid a where
     simplify _ _ = simplifyFromCellTuples
     {-# INLINE simplify #-}
     explain _ g = explainSummary (explainPartitions g _CellPartitions)
-    {-# SPECIALIZE NOINLINE explain ::
-        SimplifyCellTuples -> Grid Digit -> RegionSummaries (MonoidFor SimplifyCellTuples Digit) -> [ExplainDesc Digit]
-        #-}
+    {-# NOINLINE explain #-}
     summarize _ = cellPartitions
     {-# INLINE summarize #-}
     simplifierName _ = "Locate tuples based on possible values of cells"
@@ -254,9 +253,7 @@ instance (ValueConstraint a) => Simplifier SimplifyDigitTuples Grid a where
     simplify _ _ = simplifyFromDigitTuples
     {-# INLINE simplify #-}
     explain _ g = explainSummary (explainPartitions g _DigitPartitions)
-    {-# SPECIALIZE NOINLINE explain ::
-        SimplifyDigitTuples -> Grid Digit -> RegionSummaries (MonoidFor SimplifyDigitTuples Digit) -> [ExplainDesc Digit]
-        #-}
+    {-# NOINLINE explain #-}
     summarize _ = digitPartitions
     {-# INLINE summarize #-}
     simplifierName _ = "Locate tuples based on possible locations of digits"

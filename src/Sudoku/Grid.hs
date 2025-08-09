@@ -138,8 +138,8 @@ mkRules :: RawConstraintRows -> Rules
 mkRules rs = Rules{_constraints = Data.Foldable.fold $ over mapped mkGivens (rs ^. rawrows)}
 
 data CommonPossibilities a = CommonPossibilities
-    { _commonCells :: !(S.Set (CellPos, Cell a))
-    , _sharedPossibilities :: !(S.Set a)
+    { _commonCells :: {-# UNPACK #-} !(S.Set (CellPos, Cell a))
+    , _sharedPossibilities :: {-# UNPACK #-} !(S.Set a)
     }
     deriving (Eq, Ord, Generic)
 
@@ -184,10 +184,9 @@ type PartitionedPossibilities a = [CommonPossibilities a]
 
 data Grid a = Grid
     { _grid :: {-# UNPACK #-} !(VU.Vector (Cell a))
-    , _rules :: {-# UNPACK #-} !Rules
-    , _knownTuples :: {-# UNPACK #-} !(S.Set (CommonPossibilities a))
-    , _contradictionSearched :: {-# UNPACK #-} !(S.Set CellPos)
-    , _isSolved :: {-# UNPACK #-} !Bool
+    , _knownTuples :: !(S.Set (CommonPossibilities a))
+    , _contradictionSearched :: !(S.Set CellPos)
+    , _isSolved :: !Bool
     }
     deriving (Generic)
 
@@ -199,10 +198,6 @@ instance (NFData a) => NFData (Grid a)
 
 data ByLoc a = ByLoc {v :: a, regionNumber :: Int, region :: RegionIndicator}
     deriving (Generic)
-
--- instance (A.Elt a) => A.Elt (ByLoc a)
-
--- A.mkPattern ''ByLoc
 
 allIndices :: VU.Vector CellPos
 allIndices = VU.imap (\i _ -> i ^. cellIndex) (VU.replicate 81 ())
@@ -217,7 +212,7 @@ chunksOf _ [] = []
 chunksOf n l = take n l : chunksOf n (drop n l)
 
 instance (VU.Unbox (Cell a), Ord a, Enum a, Bounded a) => Default (Grid a) where
-    def = Grid (VU.replicate 81 mkCell) (Rules []) mempty S.empty False
+    def = Grid (VU.replicate 81 mkCell) mempty S.empty False
 
 rowAt :: (VU.Unbox (Cell a)) => Word8 -> SudokuSetTraversal a
 rowAt r =
@@ -326,7 +321,7 @@ type SudokuSetTraversal a = ReifiedIndexedTraversal' CellPos (Grid a) (Cell a)
 
 mkGrid :: Rules -> Grid Digit
 mkGrid givenRules =
-    Grid{_grid = mkBoard, _rules = givenRules, _knownTuples = S.empty, _contradictionSearched = S.empty, _isSolved = False}
+    Grid{_grid = mkBoard, _knownTuples = S.empty, _contradictionSearched = S.empty, _isSolved = False}
   where
     givenDigits = (givenRules ^.. constraints . traversed . _Given) <&> ((_2 %~ view (re _Known)) . (_1 %~ vindex))
     mkBoard = VU.replicate 81 mkCell VU.// givenDigits
@@ -336,5 +331,5 @@ type instance IxValue (Grid a) = Cell a
 type instance Index (Grid a) = CellPos
 
 instance Ixed (Grid a) where
-    ix loc = grid . cellPos . index loc
+    ix loc = grid . cells . index loc
     {-# INLINE ix #-}

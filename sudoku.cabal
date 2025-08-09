@@ -78,6 +78,8 @@ library
                     -- , Sudoku.Accelerate.Run
                     -- , Sudoku.Accelerate.Cell
     other-modules:    Data.BitSet
+                    , Data.BitMap
+                    , Data.Utils
 
     -- LANGUAGE extensions used by modules in this package.
     default-extensions:   OverloadedLabels
@@ -114,14 +116,18 @@ library
                     , bifunctors
                     , vector
                     , vector-th-unbox
+                    , vector-sized
                     , singletons-base
                     , monoidal-containers
+                    , unordered-containers
+                    , hashable
                     , text
                     , text-show
                     -- , accelerate
                     -- , accelerate-llvm
                     -- , accelerate-llvm-native
                     , template-haskell
+                    , quote-quot
                     -- , lens-accelerate
                     -- , accelerate-io-vector
 
