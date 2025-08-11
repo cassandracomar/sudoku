@@ -41,29 +41,25 @@
         #     hash = "sha256-LZ10czBn5oaKMHQ8xguC6VZa7wvEgPRu6oWt/22QaDs=";
         #   };
         # });
-        ghc =
-          if pkgs.stdenv.hostPlatform.isDarwin
-          then
-            pkgs.haskell.compiler.ghc9122.override {
-              useLLVM = true;
-            }
-          else pkgs.haskell.compiler.ghc9122;
-        haskellPackages =
-          if pkgs.stdenv.hostPlatform.isDarwin
-          then
-            pkgs.callPackage "${inputs.nixpkgs}/pkgs/development/haskell-modules" {
-              inherit ghc;
-              haskellLib = pkgs.haskell.lib.compose;
-              buildHaskellPackages = haskellPackages;
-              compilerConfig = pkgs.callPackage "${inputs.nixpkgs}/pkgs/development/haskell-modules/configuration-ghc-9.12.x.nix" {
-                haskellLib = pkgs.haskell.lib.compose;
-              };
-            }
-          else pkgs.haskell.packages.ghc9122;
+        ghc = pkgs.haskell.compiler.ghc9122.override {
+          useLLVM = true;
+        };
+        haskellPackages = pkgs.callPackage "${inputs.nixpkgs}/pkgs/development/haskell-modules" {
+          inherit ghc;
+          haskellLib = pkgs.haskell.lib.compose;
+          buildHaskellPackages = haskellPackages;
+          compilerConfig = pkgs.callPackage "${inputs.nixpkgs}/pkgs/development/haskell-modules/configuration-ghc-9.12.x.nix" {
+            haskellLib = pkgs.haskell.lib.compose;
+          };
+        };
       in {
-        # _module.args.pkgs = import nixpkgs' {
-        #   inherit system;
-        # };
+        _module.args.pkgs = import inputs.nixpkgs {
+          inherit system;
+          config.replaceStdenv = {pkgs}:
+            if pkgs.stdenv.hostPlatform.isLinux
+            then pkgs.clangStdenv
+            else pkgs.stdenv;
+        };
         haskellProjects.ghc912 = {
           defaults.packages = {}; # Disable scanning for local package
           devShell.enable = false; # Disable devShells
