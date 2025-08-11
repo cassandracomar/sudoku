@@ -191,6 +191,7 @@
             lsp-test.jailbreak = true;
             ormolu.jailbreak = true;
             retrie.jailbreak = true;
+            data-clist.jailbreak = true;
 
             cabal-install-parsers.check = false;
             singletons-base.check = false;
