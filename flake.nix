@@ -69,7 +69,7 @@
           basePackages = haskellPackages.extend (final: prev: {
             Cabal = prev.Cabal_3_14_2_0;
             Cabal-syntax = prev.Cabal-syntax_3_14_2_0;
-            stylish-haskell = prev.stylish-haskell_0_15_1_0;
+            stylish-haskell = prev.stylish-haskell_0_15_0_1;
           });
 
           packages = let
