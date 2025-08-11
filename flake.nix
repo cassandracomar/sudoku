@@ -46,7 +46,8 @@
             useLLVM = true;
           }).overrideAttrs (old:
             pkgs.lib.optionalAttrs pkgs.stdenv.hostPlatform.isLinux {
-              hardeningDisable = ["fortify"];
+              hardeningDisable = (old.hardeningFlags or []) ++ ["fortify"];
+              hadrianFlags = (old.hadrianFlags or []) ++ ["-j"];
             });
         haskellPackages = pkgs.callPackage "${inputs.nixpkgs}/pkgs/development/haskell-modules" {
           inherit ghc;
