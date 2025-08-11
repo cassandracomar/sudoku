@@ -41,13 +41,16 @@
         #     hash = "sha256-LZ10czBn5oaKMHQ8xguC6VZa7wvEgPRu6oWt/22QaDs=";
         #   };
         # });
+        hadrian = pkgs.haskell.compiler.ghc9122.hadrian.override {
+          containers = pkgs.haskell.compiler.ghc9122.bootPkgs.containers_0_8;
+        };
         ghc =
           (pkgs.haskell.compiler.ghc9122.override {
+            inherit hadrian;
             useLLVM = true;
           }).overrideAttrs (old:
             pkgs.lib.optionalAttrs pkgs.stdenv.hostPlatform.isLinux {
               hardeningDisable = (old.hardeningFlags or []) ++ ["fortify"];
-              hadrianFlags = (old.hadrianFlags or []) ++ ["-j"];
             });
         haskellPackages = pkgs.callPackage "${inputs.nixpkgs}/pkgs/development/haskell-modules" {
           inherit ghc;
