@@ -140,7 +140,6 @@
             hls-test-utils.source = "${hls-src}/hls-test-utils";
             hls-graph.source = "${hls-src}/hls-graph";
             hls-plugin-api.source = "${hls-src}/hls-plugin-api";
-            hie-compat.source = "${hls-src}/hie-compat";
             hie-bios.source = hie-bios;
             hiedb.source = pkgs.fetchFromGitHub {
               owner = "wz1000";
