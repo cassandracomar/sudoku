@@ -42,14 +42,14 @@
         #   };
         # });
         ghc =
-          if pkgs.lib.stdenv.hostPlatform.isDarwin
+          if pkgs.stdenv.hostPlatform.isDarwin
           then
             pkgs.haskell.compiler.ghc9122.override {
               useLLVM = true;
             }
           else pkgs.haskell.compiler.ghc9122;
         haskellPackages =
-          if pkgs.lib.stdenv.hostPlatform.isDarwin
+          if pkgs.stdenv.hostPlatform.isDarwin
           then
             pkgs.callPackage "${inputs.nixpkgs}/pkgs/development/haskell-modules" {
               inherit ghc;
