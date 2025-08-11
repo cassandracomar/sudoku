@@ -532,7 +532,7 @@ digitCounting = ito (,Sum 1)
 countedPoss ::
     (Enum a, Ord a, VU.IsoUnbox a Word16) =>
     IndexedFold CellPos (CellPos, Cell a) (AcrossRegion (M.MonoidalIntMap (Sum Word16)))
-countedPoss = iconstantly (ifolding @Identity (pure . over _2 (monoidalMapOf countDigits)))
+countedPoss = iconstantly $ ifolding @Identity (pure . over _2 (monoidalMapOf countDigits))
   where
     countDigits = _Possibly . _CellSet . bsfolded . from enumerated . digitCounting
 {-# INLINE countedPoss #-}
@@ -548,9 +548,10 @@ countedKnowns = iconstantly $ ifolding (Identity . over _2 (monoidalMapOf (_Know
 
 -- | a `Fold` producing a map of digit locations within a region of the grid
 valueAlignment ::
-    (Enum a, Ord a) => IndexedFold CellPos (CellPos, Cell a) (AcrossRegion (LocationAlignment a))
-valueAlignment = iconstantly $ ifolding @Identity (\(loc, cell) -> pure (loc, allocateLocs loc cell))
+    forall a. (Enum a, Ord a) => IndexedFold CellPos (CellPos, Cell a) (AcrossRegion (LocationAlignment a))
+valueAlignment = iconstantly $ ifolding (uncurry mk)
   where
+    mk = (.) <$> (,) <*> allocateLocs >>>> Identity
     allocateLocs loc cell =
         LocationAlignment $
             foldlOf' (_Possibly . _CellSet . bsfolded . from enumerated) (\r d -> M.insert d (V.singleton loc) r) M.empty cell

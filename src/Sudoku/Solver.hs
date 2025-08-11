@@ -19,8 +19,6 @@ import TextShow as TB (Builder, TextShow (showb, showbList), toLazyText, unlines
 
 import Data.BitSet qualified as A.BS
 import Data.ByteString qualified as BS
-import Data.Foldable qualified as F
-import Data.List qualified as L
 import Data.Set qualified as S
 import Data.Vector.Unboxed qualified as VU
 
@@ -38,7 +36,7 @@ runSimplifierOnce :: forall m a. (SolverMonad m, ValueConstraint a) => Simplify 
 runSimplifierOnce f g =
     ensure (const solveCheck) g <|> ensure (== g) g' <|> do
         when (null contras) $ printStep f g res
-        unless (null contras) . printContradictions $ F.foldMap' (L.singleton . showb) contras
+        unless (null contras) $ printContradictions (contras ^.. folded . to showb)
         guard (null contras) $> g'
   where
     res = runSimplifierPure f g
