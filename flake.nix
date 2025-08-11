@@ -79,7 +79,7 @@
               patches = [
                 (pkgs.fetchpatch {
                   url = "https://github.com/haskell/haskell-language-server/pull/4630.patch";
-                  sha256 = "sha256-ZIJaxFOniesaFTZfXHWDmJOtXYiQ6v029YGWdfMPkB8=";
+                  sha256 = "sha256-7UJJe2uWWeuLfvEA6IlC70xi0SehGBlKGrzEhYzIm+Y=";
                 })
                 ./inlay-hints-local-binding.patch
                 ./package-import-inlay-hints.patch
