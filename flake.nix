@@ -303,7 +303,10 @@
             # };
             sudoku = {self, ...}: {
               extraLibraries = [self.containers_0_8];
-              custom = drv: pkgs.haskell.lib.compose.allowInconsistentDependencies drv;
+              custom = drv:
+                pkgs.haskell.lib.compose.allowInconsistentDependencies (drv.override {
+                  containers = self.containers_0_8;
+                });
             };
           };
 
