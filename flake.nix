@@ -290,7 +290,9 @@
           };
         };
         haskellProjects.default = {
-          basePackages = config.haskellProjects.ghc912.outputs.finalPackages;
+          basePackages = config.haskellProjects.ghc912.outputs.finalPackages.extend (final: prev: {
+            containers = prev.containers_0_8;
+          });
           projectRoot = ./.;
 
           settings = {
@@ -309,7 +311,17 @@
             hlsCheck.enable = pkgs.stdenv.isDarwin;
             hoogle = true;
             tools = hs: {
-              inherit (hs) cabal-install fourmolu hlint cabal-hoogle stylish-haskell cabal-gild cabal-fmt;
+              inherit
+                (config.haskellProjects.ghc912.outputs.finalPackages)
+                cabal-install
+                fourmolu
+                hlint
+                cabal-hoogle
+                stylish-haskell
+                cabal-gild
+                cabal-fmt
+                haskell-language-server
+                ;
               graphviz = inputs.nixpkgs.legacyPackages.${system}.graphviz;
             };
             mkShellArgs = {
