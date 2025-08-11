@@ -295,6 +295,10 @@
           });
           projectRoot = ./.;
 
+          packages = {
+            inherit (config.haskellProjects.ghc912.outputs.finalPackages) inspection-testing;
+          };
+
           settings = {
             text-show.extraConfigureFlags = ["--ghc-options=-fexpose-all-unfoldings"];
             # lens-accelerate = {
