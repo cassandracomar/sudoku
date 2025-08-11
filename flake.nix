@@ -180,6 +180,7 @@
               rev = "c5c12325f2713aa3856cf7b86bc05064484d3c26";
               sha256 = "sha256-grGuPu1F+Xl2OiYQOfZp7BQR9Kv/vvh+xpnfZdFkhpE=";
             };
+            stylish-haskell.source = "0.15.1.0";
           };
 
           settings = {
@@ -193,7 +194,6 @@
             retrie.jailbreak = true;
             data-clist.jailbreak = true;
             hw-prim.jailbreak = true;
-            stylish-haskell.jailbreak = true;
 
             cabal-install-parsers.check = false;
             singletons-base.check = false;
