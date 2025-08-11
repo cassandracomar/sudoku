@@ -290,14 +290,10 @@
           };
         };
         haskellProjects.default = {
-          basePackages = config.haskellProjects.ghc912.outputs.finalPackages.extend (final: prev: {
-            containers = prev.containers_0_8;
-          });
+          basePackages =
+            config.haskellProjects.ghc912.outputs.finalPackages.extend (final: prev: {
+            });
           projectRoot = ./.;
-
-          packages = {
-            inherit (config.haskellProjects.ghc912.outputs.finalPackages) inspection-testing;
-          };
 
           settings = {
             text-show.extraConfigureFlags = ["--ghc-options=-fexpose-all-unfoldings"];
