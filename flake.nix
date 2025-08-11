@@ -42,20 +42,24 @@
         #   };
         # });
         ghc =
-          (pkgs.haskell.compiler.ghc9122.override {
-            useLLVM = true;
-          }).overrideAttrs (old:
-            pkgs.lib.optionalAttrs pkgs.stdenv.hostPlatform.isLinux {
-              hardeningDisable = (old.hardeningFlags or []) ++ ["fortify"];
-            });
-        haskellPackages = pkgs.callPackage "${inputs.nixpkgs}/pkgs/development/haskell-modules" {
-          inherit ghc;
-          haskellLib = pkgs.haskell.lib.compose;
-          buildHaskellPackages = haskellPackages;
-          compilerConfig = pkgs.callPackage "${inputs.nixpkgs}/pkgs/development/haskell-modules/configuration-ghc-9.12.x.nix" {
-            haskellLib = pkgs.haskell.lib.compose;
-          };
-        };
+          if pkgs.lib.stdenv.hostPlatform.isDarwin
+          then
+            pkgs.haskell.compiler.ghc9122.override {
+              useLLVM = true;
+            }
+          else pkgs.haskell.compiler.ghc9122;
+        haskellPackages =
+          if pkgs.lib.stdenv.hostPlatform.isDarwin
+          then
+            pkgs.callPackage "${inputs.nixpkgs}/pkgs/development/haskell-modules" {
+              inherit ghc;
+              haskellLib = pkgs.haskell.lib.compose;
+              buildHaskellPackages = haskellPackages;
+              compilerConfig = pkgs.callPackage "${inputs.nixpkgs}/pkgs/development/haskell-modules/configuration-ghc-9.12.x.nix" {
+                haskellLib = pkgs.haskell.lib.compose;
+              };
+            }
+          else pkgs.haskell.packages.ghc9122;
       in {
         # _module.args.pkgs = import nixpkgs' {
         #   inherit system;
