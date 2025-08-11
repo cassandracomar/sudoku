@@ -192,6 +192,7 @@
             ormolu.jailbreak = true;
             retrie.jailbreak = true;
             data-clist.jailbreak = true;
+            hw-prim.jailbreak = true;
 
             cabal-install-parsers.check = false;
             singletons-base.check = false;
