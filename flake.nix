@@ -65,7 +65,7 @@
             else pkgs.stdenv;
           overlays = [
             (final: prev:
-              prev.lib.optionalAttrs prev.stdenv.isLinux {
+              prev.lib.optionalAttrs prev.stdenv.isLinux rec {
                 python3 = prev.python3.override {
                   packageOverrides = pyfinal: pyprev: {
                     pycparser = pyprev.pycparser.overrideAttrs (old: {
