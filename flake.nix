@@ -193,6 +193,7 @@
             retrie.jailbreak = true;
             data-clist.jailbreak = true;
             hw-prim.jailbreak = true;
+            stylish-haskell.jailbreak = true;
 
             cabal-install-parsers.check = false;
             singletons-base.check = false;
