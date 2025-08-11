@@ -41,9 +41,13 @@
         #     hash = "sha256-LZ10czBn5oaKMHQ8xguC6VZa7wvEgPRu6oWt/22QaDs=";
         #   };
         # });
-        ghc = pkgs.haskell.compiler.ghc9122.override {
-          useLLVM = true;
-        };
+        ghc =
+          (pkgs.haskell.compiler.ghc9122.override {
+            useLLVM = true;
+          }).overrideAttrs (old:
+            pkgs.lib.optionalAttrs pkgs.stdenv.isLinux {
+              hadrianFlags = (old.hadrianFlags or []) ++ ["-j"];
+            });
         haskellPackages = pkgs.callPackage "${inputs.nixpkgs}/pkgs/development/haskell-modules" {
           inherit ghc;
           haskellLib = pkgs.haskell.lib.compose;
