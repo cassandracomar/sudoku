@@ -73,6 +73,7 @@
                     });
                   };
                 };
+                python3Packages = python3.pkgs;
               })
           ];
         };
