@@ -63,6 +63,18 @@
             if pkgs.stdenv.hostPlatform.isLinux
             then pkgs.clangStdenv
             else pkgs.stdenv;
+          overlays = [
+            (final: prev:
+              prev.lib.optionalAttrs prev.stdenv.isLinux {
+                python3 = prev.python3.override {
+                  packageOverrides = pyfinal: pyprev: {
+                    pycparser = pyprev.pycparser.overrideAttrs (old: {
+                      unittestCheckPhase = "true";
+                    });
+                  };
+                };
+              })
+          ];
         };
         haskellProjects.ghc912 = {
           defaults.packages = {}; # Disable scanning for local package
