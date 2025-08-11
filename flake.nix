@@ -199,6 +199,7 @@
             hiedb.check = false;
             retrie.check = false;
             cryptonite.check = false;
+            test-ini-compat.check = false;
 
             cabal-hoogle.broken = false;
             cabal-hoogle.check = false;
