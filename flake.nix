@@ -206,6 +206,11 @@
             cabal-hoogle.broken = false;
             cabal-hoogle.check = false;
 
+            doctest-parallel.custom = drv:
+              drv.overrideAttrs (old: {
+                patches = null;
+              });
+
             hls-plugin-api = {
               extraBuildTools = [pkgs.git];
               jailbreak = true;
