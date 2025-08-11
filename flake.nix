@@ -67,7 +67,6 @@
           autoWire = []; # Don't wire any flake outputs
 
           basePackages = haskellPackages.extend (final: prev: {
-            Diff = prev.Diff_1_0_2;
             Cabal = prev.Cabal_3_14_2_0;
             Cabal-syntax = prev.Cabal-syntax_3_14_2_0;
             stylish-haskell = prev.stylish-haskell_0_15_1_0;
