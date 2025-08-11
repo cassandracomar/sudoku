@@ -73,14 +73,10 @@
               src = pkgs.fetchFromGitHub {
                 owner = "haskell";
                 repo = "haskell-language-server";
-                rev = "b8c9b8466afe5521ce5ae3b2c7195cafe8dda371";
-                sha256 = "sha256-TKTAItDgtcFPWfoZTYRKGDAqY6oDYDfRPZhI84OgKzo=";
+                rev = "e3d38b0c4666681dca39901aa9d47b04422c82ff";
+                sha256 = "sha256-FMCBKSS0pqKtPXqPrM95Gn9Mj7F9uPq4hLMMIXSlqaw=";
               };
               patches = [
-                (pkgs.fetchpatch {
-                  url = "https://github.com/haskell/haskell-language-server/pull/4630.patch";
-                  sha256 = "sha256-7UJJe2uWWeuLfvEA6IlC70xi0SehGBlKGrzEhYzIm+Y=";
-                })
                 ./inlay-hints-local-binding.patch
                 ./package-import-inlay-hints.patch
               ];
