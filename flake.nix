@@ -41,37 +41,43 @@
         #     hash = "sha256-LZ10czBn5oaKMHQ8xguC6VZa7wvEgPRu6oWt/22QaDs=";
         #   };
         # });
-        # libcxxStdenv =
-        #   pkgs.overrideCC (
-        #     pkgs.llvmPackages.libcxxStdenv.override (old: {
-        #       hostPlatform =
-        #         (old.hostPlatform or {})
-        #         // {
-        #           useLLVM = true;
-        #           linker = "lld";
-        #         };
-        #       buildPlatform =
-        #         (old.buildPlatform or {})
-        #         // {
-        #           useLLVM = true;
-        #           linker = "lld";
-        #         };
-        #       targetPlatform =
-        #         (old.targetPlatform or {})
-        #         // {
-        #           useLLVM = true;
-        #           linker = "lld";
-        #         };
-        #     })
-        #   )
-        #   pkgs.llvmPackages.clangUseLLVM;
+        libcxxStdenv =
+          pkgs.overrideCC (
+            pkgs.llvmPackages.libcxxStdenv.override (old: {
+              hostPlatform =
+                (old.hostPlatform or {})
+                // {
+                  useLLVM = true;
+                  linker = "lld";
+                };
+              buildPlatform =
+                (old.buildPlatform or {})
+                // {
+                  useLLVM = true;
+                  linker = "lld";
+                };
+              targetPlatform =
+                (old.targetPlatform or {})
+                // {
+                  useLLVM = true;
+                  linker = "lld";
+                };
+            })
+          )
+          pkgs.llvmPackages.clangUseLLVM;
+        targetPackages = import inputs.nixpkgs {
+          inherit system;
+          config.replaceStdenv = {...}: libcxxStdenv;
+        };
         ghc =
           (pkgs.haskell.compiler.ghc9122.override {
+            inherit targetPackages;
             useLLVM = true;
-            # stdenv =
-            #   if pkgs.stdenv.isLinux
-            #   then libcxxStdenv
-            #   else pkgs.stdenv;
+            stdenv =
+              if pkgs.stdenv.isLinux
+              then libcxxStdenv
+              else pkgs.stdenv;
+            buildTargetPackages = targetPackages;
           }).overrideAttrs (old:
             pkgs.lib.optionalAttrs pkgs.stdenv.isLinux {
               hardeningDisable = (old.hardeningDisable or []) ++ ["fortify"];
@@ -81,10 +87,10 @@
           inherit ghc;
           haskellLib = pkgs.haskell.lib.compose;
           buildHaskellPackages = haskellPackages;
-          # stdenv =
-          #   if pkgs.stdenv.isLinux
-          #   then libcxxStdenv
-          #   else pkgs.stdenv;
+          stdenv =
+            if pkgs.stdenv.isLinux
+            then libcxxStdenv
+            else pkgs.stdenv;
           compilerConfig = pkgs.callPackage "${inputs.nixpkgs}/pkgs/development/haskell-modules/configuration-ghc-9.12.x.nix" {
             haskellLib = pkgs.haskell.lib.compose;
           };
@@ -92,33 +98,29 @@
       in {
         _module.args.pkgs = import inputs.nixpkgs {
           inherit system;
-          config.replaceStdenv = {pkgs}:
-            if pkgs.stdenv.hostPlatform.isLinux
-            then
-              pkgs.overrideCC (
-                inputs.nixpkgs.legacyPackages.${system}.llvmPackages.libcxxStdenv
-              )
-              inputs.nixpkgs.legacyPackages.${system}.llvmPackages.clangUseLLVM
-            else pkgs.stdenv;
-          overlays = [
-            (final: prev:
-              prev.lib.optionalAttrs prev.stdenv.isLinux rec {
-                python3 = prev.python3.override {
-                  packageOverrides = pyfinal: pyprev: {
-                    pycparser = pyprev.pycparser.overrideAttrs (old: {
-                      unittestCheckPhase = "true";
-                    });
-                    sphinx = pyprev.sphinx.overrideAttrs (old: {
-                      pytestCheckPhase = "true";
-                      unittestCheckPhase = "true";
-                      pythonImportsCheckPhase = "true";
-                    });
-                  };
-                };
-                python3Packages = python3.pkgs;
-                sphinx = python3Packages.sphinx;
-              })
-          ];
+          # config.replaceStdenv = {pkgs}:
+          #   if pkgs.stdenv.hostPlatform.isLinux
+          #   then pkgs.llvmPackages.libcxxStdenv
+          #   else pkgs.stdenv;
+          # overlays = [
+          #   (final: prev:
+          #     prev.lib.optionalAttrs prev.stdenv.isLinux rec {
+          #       python3 = prev.python3.override {
+          #         packageOverrides = pyfinal: pyprev: {
+          #           pycparser = pyprev.pycparser.overrideAttrs (old: {
+          #             unittestCheckPhase = "true";
+          #           });
+          #           sphinx = pyprev.sphinx.overrideAttrs (old: {
+          #             pytestCheckPhase = "true";
+          #             unittestCheckPhase = "true";
+          #             pythonImportsCheckPhase = "true";
+          #           });
+          #         };
+          #       };
+          #       python3Packages = python3.pkgs;
+          #       sphinx = python3Packages.sphinx;
+          #     })
+          # ];
         };
         haskellProjects.ghc912 = {
           defaults.packages = {}; # Disable scanning for local package
@@ -423,7 +425,7 @@
         # packages.llvm-hs = config.haskellProjects.ghc912.outputs.finalPackages.llvm-hs;
         packages.stdenv = pkgs.stdenv;
         packages.llvm = pkgs.llvmPackages.llvm;
-        # packages.libcxxStdenv = libcxxStdenv;
+        packages.libcxxStdenv = libcxxStdenv;
 
         packages.default = self'.packages.sudoku;
         formatter = inputs.nixpkgs.legacyPackages.${system}.alejandra;
