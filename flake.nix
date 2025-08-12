@@ -65,18 +65,6 @@
             then
               pkgs.overrideCC (
                 pkgs.llvmPackages.libcxxStdenv.override (old: {
-                  hostPlatform =
-                    (old.hostPlatform or {})
-                    // {
-                      useLLVM = true;
-                      linker = "lld";
-                    };
-                  buildPlatform =
-                    (old.buildPlatform or {})
-                    // {
-                      useLLVM = true;
-                      linker = "lld";
-                    };
                   targetPlatform =
                     (old.targetPlatform or {})
                     // {
