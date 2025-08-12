@@ -75,7 +75,7 @@
           }
           // pkgs.lib.optionalAttrs pkgs.stdenv.isLinux {
             # inherit targetPackages;
-            stdenv = libcxxStdenv;
+            stdenv = pkgs.llvmPackages.libcxxStdenv;
             # pkgsHostTarget =
             #   pkgs.pkgsHostTarget
             #   // {
@@ -97,7 +97,7 @@
           buildHaskellPackages = haskellPackages;
           stdenv =
             if pkgs.stdenv.isLinux
-            then libcxxStdenv
+            then pkgs.llvmPackages.libcxxStdenv
             else pkgs.stdenv;
           compilerConfig = pkgs.callPackage "${inputs.nixpkgs}/pkgs/development/haskell-modules/configuration-ghc-9.12.x.nix" {
             haskellLib = pkgs.haskell.lib.compose;
