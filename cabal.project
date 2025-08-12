@@ -12,8 +12,11 @@ jobs: $ncpus
 semaphore: True
 split-sections: True
 -- shared: True
+executable-static: True
 program-options
     ghc-options:
+                 -- LLVM options
+                 -fllvm
                  -mavx
                  -mavx2
                  -mbmi
@@ -41,16 +44,17 @@ program-options
                  -optl-O3
                  -optl-flto=thin
                  -optl-fuse-ld=lld
-                 -fllvm
                  -fPIE
                  -fPIC
                  -optlo-O3
                  -optlo=--thinlto-bc
-                 -- -optlo-passes=default<O3>,load-store-vectorizer,slp-vectorizer,vector-combine,loop-vectorize,loop-idiom-vectorize
                  -optlc-O3
-                 -- -optlc-mattr=+neon
                  -optlas-O3
                  -optlm-O3
+                 -- -optlc-mattr=+neon
+                 -- -optlo-passes=default<O3>,load-store-vectorizer,slp-vectorizer,vector-combine,loop-vectorize,loop-idiom-vectorize
+
+                 -- everything else
                  -fsplit-sections
                  -funbox-strict-fields
                  -- inline aggressively to ensure lenses/polymorphic functions are fully saturated at concrete types
