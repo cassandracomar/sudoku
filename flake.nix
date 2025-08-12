@@ -421,7 +421,7 @@
               graphviz = inputs.nixpkgs.legacyPackages.${system}.graphviz;
             };
             mkShellArgs = {
-              packages = with pkgs.llvmPackages; [libllvm libllvm.dev libllvm.lib llvm];
+              packages = with pkgs.llvmPackages; [libllvm libllvm.dev libllvm.lib llvm clangUseLLVM];
               # shellHook = ''
               #   export LD="${pkgs.llvmPackages_16.libcxxStdenv.cc}/bin/clang"
               # '';
