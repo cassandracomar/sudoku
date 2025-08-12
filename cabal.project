@@ -36,6 +36,7 @@ program-options
                  -optl-O3
                  -optl-mcpu=znver4
                  -optl-flto=thin
+                 -optl-fuse-ld=lld
                  -fllvm
                  -fPIE
                  -optlo-O3
