@@ -7,7 +7,7 @@ executable-profiling: False
 library-profiling: False
 profiling: False
 profiling-detail: none
--- allow-newer: all
+allow-newer: all
 jobs: $ncpus
 semaphore: True
 split-sections: True
@@ -15,14 +15,14 @@ program-options
     ghc-options:
                  -opta-O3
                  -opta-flto=thin
-                 -opta-funified-lto
+                 -- -opta-funified-lto
                  -- -opta-mcpu=apple-m1
                  -optl-O3
                  -- -optl-mcpu=apple-m1
                  -- -optl-flto=full
                  -- -fllvm
                  -optl-flto=thin
-                 -optl-funified-lto
+                 -- -optl-funified-lto
                  -- -optlo-O3
                  -- -optlo-mcpu=apple-m1
                  -- -optlo=--thinlto-bc
