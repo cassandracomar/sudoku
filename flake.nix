@@ -62,28 +62,29 @@
           inherit system;
           config.replaceStdenv = {pkgs}:
             if pkgs.stdenv.hostPlatform.isLinux
-            then pkgs.overrideCC (
-              pkgs.llvmPackages.libcxxStdenv.override (old: {
-                hostPlatform =
-                  (old.hostPlatform or {})
-                  // {
-                    useLLVM = true;
-                    linker = "lld";
-                  };
-                buildPlatform =
-                  (old.buildPlatform or {})
-                  // {
-                    useLLVM = true;
-                    linker = "lld";
-                  };
-                targetPlatform =
-                  (old.targetPlatform or {})
-                  // {
-                    useLLVM = true;
-                    linker = "lld";
-                  };
-              })
-            )
+            then
+              pkgs.overrideCC (
+                pkgs.llvmPackages.libcxxStdenv.override (old: {
+                  hostPlatform =
+                    (old.hostPlatform or {})
+                    // {
+                      useLLVM = true;
+                      linker = "lld";
+                    };
+                  buildPlatform =
+                    (old.buildPlatform or {})
+                    // {
+                      useLLVM = true;
+                      linker = "lld";
+                    };
+                  targetPlatform =
+                    (old.targetPlatform or {})
+                    // {
+                      useLLVM = true;
+                      linker = "lld";
+                    };
+                })
+              )
               pkgs.llvmPackages.clangUseLLVM
             else pkgs.stdenv;
           # overlays = [
@@ -409,7 +410,7 @@
         # packages.llvm-hs = config.haskellProjects.ghc912.outputs.finalPackages.llvm-hs;
         packages.stdenv = pkgs.stdenv;
         packages.llvm = pkgs.llvmPackages.llvm;
-        packages.libcxxStdenv = libcxxStdenv;
+        packages.libcxxStdenv = pkgs.stdenv;
 
         packages.default = self'.packages.sudoku;
         formatter = inputs.nixpkgs.legacyPackages.${system}.alejandra;
