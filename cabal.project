@@ -26,26 +26,28 @@ program-options
                  -mavx512er
                  -mavx512f
                  -mavx512pf
+                 -pgmlas=clang
+                 -pgmc=clang
+                 -pgml=clang
+                 -pgmo=opt
+                 -pgmlc=llc
                  -opta-O3
                  -opta-flto=thin
-                 -- -opta-funified-lto
-                 -- -opta-mcpu=znver4
-                 -- -optl-O3
-                 -- -optl-mcpu=znver4
+                 -opta-mcpu=znver4
+                 -optl-O3
+                 -optl-mcpu=znver4
                  -optl-flto=thin
-                 -- -fllvm
-                 -optl-flto=thin
-                 -- -optl-funified-lto
-                 -- -optlo-O3
-                 -- -optlo-mcpu=znver4
-                 -- -optlo=--thinlto-bc
-                 -- -optlc-O3
-                 -- -optlc-mcpu=znver4
-                 -- -optlc-mattr=+neon
-                 -- -optlas-O3
-                 -- -optlas-mcpu=znver4
-                 -- -optlm-O3
-                 -- -optlm-mcpu=znver4
+                 -fllvm
+                 -optlo-O3
+                 -optlo-mcpu=znver4
+                 -optlo=--thinlto-bc
+                 -optlc-O3
+                 -optlc-mcpu=znver4
+                 -optlc-mattr=+neon
+                 -optlas-O3
+                 -optlas-mcpu=znver4
+                 -optlm-O3
+                 -optlm-mcpu=znver4
                  -fsplit-sections
                  -funbox-strict-fields
                  -- inline aggressively to ensure lenses/polymorphic functions are fully saturated at concrete types
