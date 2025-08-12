@@ -270,7 +270,6 @@
               staticLibraries = false;
               custom = drv:
                 pkgs.haskell.lib.compose.overrideCabal (old: {
-                  nativeBuildInputs = (old.nativeBuildInputs or []) ++ [pkgs.autoPatchelfHook];
                   postInstall =
                     (old.postInstall or "")
                     + (pkgs.lib.optionalString pkgs.stdenv.hostPlatform.isDarwin ''
@@ -282,7 +281,9 @@
                       mv dist/build/*.so $out/lib/
                     '');
                 })
-                (drv.override {stylish-haskell = pkgs.hello;});
+                ((drv.override {stylish-haskell = pkgs.hello;}).overrideAttrs (old: {
+                  nativeBuildInputs = (old.nativeBuildInputs or []) ++ [pkgs.autoPatchelfHook];
+                }));
               jailbreak = true;
               check = false;
             };
