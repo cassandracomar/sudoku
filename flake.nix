@@ -282,7 +282,9 @@
                     '');
                 })
                 ((drv.override {stylish-haskell = pkgs.hello;}).overrideAttrs (old: {
-                  nativeBuildInputs = (old.nativeBuildInputs or []) ++ [pkgs.autoPatchelfHook];
+                  nativeBuildInputs =
+                    (old.nativeBuildInputs or [])
+                    ++ pkgs.lib.optionalString pkgs.stdenv.hostPlatform.isLinux [pkgs.autoPatchelfHook];
                 }));
               jailbreak = true;
               check = false;
