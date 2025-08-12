@@ -36,9 +36,11 @@ program-options
                  -optl-mcpu=znver4
                  -optl-flto=thin
                  -fllvm
+                 -fPIE
                  -optlo-O3
                  -optlo-mcpu=znver4
                  -optlo=--thinlto-bc
+                 -- -optlo-passes=default<O3>,load-store-vectorizer,slp-vectorizer,vector-combine,loop-vectorize,loop-idiom-vectorize
                  -optlc-O3
                  -optlc-mcpu=znver4
                  -- -optlc-mattr=+neon
