@@ -77,6 +77,7 @@
             buildPackages = targetPackages;
             pkgsHostTarget = {
               inherit targetPackages;
+              inherit (pkgs.pkgsLLVM) elfutils gmp libffi ncurses numactl;
             };
             pkgsBuildTarget = {
               inherit targetPackages;
