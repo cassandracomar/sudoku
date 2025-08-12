@@ -77,7 +77,8 @@
               if pkgs.stdenv.isLinux
               then libcxxStdenv
               else pkgs.stdenv;
-            buildTargetPackages = targetPackages;
+            pkgsBuildTarget = targetPackages;
+            pkgsHostTarget = targetPackages;
           }).overrideAttrs (old:
             pkgs.lib.optionalAttrs pkgs.stdenv.isLinux {
               hardeningDisable = (old.hardeningDisable or []) ++ ["fortify"];
