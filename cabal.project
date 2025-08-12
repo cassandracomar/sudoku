@@ -11,7 +11,7 @@ allow-newer: all
 jobs: $ncpus
 semaphore: True
 split-sections: True
-shared: True
+-- shared: True
 program-options
     ghc-options:
                  -mavx
