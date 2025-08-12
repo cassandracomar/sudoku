@@ -270,6 +270,7 @@
               staticLibraries = false;
               custom = drv:
                 pkgs.haskell.lib.compose.overrideCabal (old: {
+                  nativeBuildInputs = (old.nativeBuildInputs or []) ++ [pkgs.autoPatchelfHook];
                   postInstall =
                     (old.postInstall or "")
                     + (pkgs.lib.optionalString pkgs.stdenv.hostPlatform.isDarwin ''
@@ -278,6 +279,7 @@
                     '')
                     + (pkgs.lib.optionalString pkgs.stdenv.hostPlatform.isLinux ''
                       ldd $out/bin/haskell-language-server
+                      mv dist/build/*.so $out/lib/
                     '');
                 })
                 (drv.override {stylish-haskell = pkgs.hello;});
