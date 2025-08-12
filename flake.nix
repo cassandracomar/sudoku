@@ -84,6 +84,11 @@
             };
           })).overrideAttrs (old:
           pkgs.lib.optionalAttrs pkgs.stdenv.isLinux {
+            preConfigure =
+              (old.preConfigure or "")
+              + ''
+                export CLANG=${libcxxStdenv.cc}/bin/clang
+              '';
             hardeningDisable = (old.hardeningDisable or []) ++ ["fortify"];
             hadrianFlags = (old.hadrianFlags or []) ++ ["-j"];
           });
