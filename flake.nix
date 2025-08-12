@@ -277,7 +277,7 @@
                       find ${ghc}/lib/ghc-9.12.2/lib/aarch64-osx-ghc-9.12.2* -name "*.dylib" -exec ln -sf {} $out/lib/links/ \;
                     '')
                     + (pkgs.lib.optionalString pkgs.stdenv.hostPlatform.isLinux ''
-
+                      ldd $out/bin/haskell-language-server
                     '');
                 })
                 (drv.override {stylish-haskell = pkgs.hello;});
