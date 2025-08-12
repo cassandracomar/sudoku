@@ -67,27 +67,27 @@
           (pkgs.llvmPackages.clangUseLLVM.override {
             inherit (pkgs.llvmPackages) bintools;
           });
-        # targetPackages = {
-        #   stdenv = libcxxStdenv;
-        # };
+        targetPackages = {
+          stdenv = libcxxStdenv;
+        };
         ghc = (pkgs.haskell.compiler.ghc9122.override ({
             useLLVM = true;
           }
           // pkgs.lib.optionalAttrs pkgs.stdenv.isLinux {
-            # inherit targetPackages;
+            inherit targetPackages;
             stdenv = pkgs.llvmPackages.libcxxStdenv;
-            # pkgsHostTarget =
-            #   pkgs.pkgsHostTarget
-            #   // {
-            #     inherit targetPackages;
-            #   };
+            pkgsHostTarget =
+              pkgs.pkgsHostTarget
+              // {
+                inherit targetPackages;
+              };
           })).overrideAttrs (old:
           pkgs.lib.optionalAttrs pkgs.stdenv.isLinux {
-            # preConfigure =
-            #   (old.preConfigure or "")
-            #   + ''
-            #     export CLANG=${libcxxStdenv.cc}/bin/clang
-            #   '';
+            preConfigure =
+              (old.preConfigure or "")
+              + ''
+                export CLANG=${libcxxStdenv.cc}/bin/clang
+              '';
             hardeningDisable = (old.hardeningDisable or []) ++ ["fortify"];
             hadrianFlags = (old.hadrianFlags or []) ++ ["-j"];
           });
@@ -418,10 +418,12 @@
                 cabal-fmt
                 haskell-language-server
                 ;
+              inherit (pkgs.llvmPackages) bintools libllvm llvm clangUseLLVM;
+              inherit (pkgs.llvmPackages.libllvm) lib dev;
               graphviz = inputs.nixpkgs.legacyPackages.${system}.graphviz;
             };
             mkShellArgs = {
-              packages = with pkgs.llvmPackages; [libllvm libllvm.dev libllvm.lib llvm clangUseLLVM];
+              # packages = with pkgs.llvmPackages; [libllvm libllvm.dev libllvm.lib llvm clangUseLLVM];
               # shellHook = ''
               #   export LD="${pkgs.llvmPackages_16.libcxxStdenv.cc}/bin/clang"
               # '';
