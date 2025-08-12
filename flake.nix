@@ -44,7 +44,10 @@
         ghc =
           (pkgs.haskell.compiler.ghc9122.override {
             useLLVM = true;
-            stdenv = pkgs.llvmPackages.libcxxStdenv;
+            stdenv =
+              if pkgs.stdenv.isLinux
+              then pkgs.llvmPackages.libcxxStdenv
+              else pkgs.stdenv;
           }).overrideAttrs (old:
             pkgs.lib.optionalAttrs pkgs.stdenv.isLinux {
               hardeningDisable = (old.hardeningDisable or []) ++ ["fortify"];
