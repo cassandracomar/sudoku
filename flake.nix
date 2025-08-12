@@ -64,7 +64,7 @@
             if pkgs.stdenv.hostPlatform.isLinux
             then
               pkgs.overrideCC (
-                pkgs.llvmPackages.libcxxStdenv.override (old: {
+                pkgs.clangStdenv.override (old: {
                   targetPlatform =
                     (old.targetPlatform or {})
                     // {
