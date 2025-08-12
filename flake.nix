@@ -74,13 +74,9 @@
           // pkgs.lib.optionalAttrs pkgs.stdenv.isLinux {
             inherit targetPackages;
             stdenv = libcxxStdenv;
-            buildPackages = targetPackages;
             pkgsHostTarget = {
               inherit targetPackages;
               inherit (pkgs.pkgsLLVM) elfutils gmp libffi ncurses numactl;
-            };
-            pkgsBuildTarget = {
-              inherit targetPackages;
             };
           })).overrideAttrs (old:
           pkgs.lib.optionalAttrs pkgs.stdenv.isLinux {
