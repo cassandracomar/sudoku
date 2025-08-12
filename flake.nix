@@ -65,19 +65,17 @@
             })
           )
           pkgs.llvmPackages.clangUseLLVM;
-        ghc =
-          (pkgs.haskell.compiler.ghc9122.override {
-            inherit (pkgs.pkgsLLVM) targetPackages pkgsBuildTarget pkgsHostTarget buildPackages;
+        ghc = (pkgs.haskell.compiler.ghc9122.override ({
             useLLVM = true;
-            stdenv =
-              if pkgs.stdenv.isLinux
-              then libcxxStdenv
-              else pkgs.stdenv;
-          }).overrideAttrs (old:
-            pkgs.lib.optionalAttrs pkgs.stdenv.isLinux {
-              hardeningDisable = (old.hardeningDisable or []) ++ ["fortify"];
-              hadrianFlags = (old.hadrianFlags or []) ++ ["-j"];
-            });
+          }
+          // pkgs.lib.optionalAttrs pkgs.stdenv.isLinux {
+            inherit (pkgs.pkgsLLVM) targetPackages pkgsBuildTarget pkgsHostTarget buildPackages;
+            stdenv = libcxxStdenv;
+          })).overrideAttrs (old:
+          pkgs.lib.optionalAttrs pkgs.stdenv.isLinux {
+            hardeningDisable = (old.hardeningDisable or []) ++ ["fortify"];
+            hadrianFlags = (old.hadrianFlags or []) ++ ["-j"];
+          });
         haskellPackages = pkgs.callPackage "${inputs.nixpkgs}/pkgs/development/haskell-modules" {
           inherit ghc;
           haskellLib = pkgs.haskell.lib.compose;
