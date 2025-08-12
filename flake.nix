@@ -96,26 +96,7 @@
             if pkgs.stdenv.hostPlatform.isLinux
             then
               pkgs.overrideCC (
-                inputs.nixpkgs.legacyPackages.${system}.llvmPackages.libcxxStdenv.override (old: {
-                  hostPlatform =
-                    (old.hostPlatform or {})
-                    // {
-                      useLLVM = true;
-                      linker = "lld";
-                    };
-                  buildPlatform =
-                    (old.buildPlatform or {})
-                    // {
-                      useLLVM = true;
-                      linker = "lld";
-                    };
-                  targetPlatform =
-                    (old.targetPlatform or {})
-                    // {
-                      useLLVM = true;
-                      linker = "lld";
-                    };
-                })
+                inputs.nixpkgs.legacyPackages.${system}.llvmPackages.libcxxStdenv
               )
               inputs.nixpkgs.legacyPackages.${system}.llvmPackages.clangUseLLVM
             else pkgs.stdenv;
