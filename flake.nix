@@ -44,6 +44,18 @@
         libcxxStdenv =
           pkgs.overrideCC (
             pkgs.llvmPackages.libcxxStdenv.override (old: {
+              hostPlatform =
+                (old.hostPlatform or {})
+                // {
+                  useLLVM = true;
+                  linker = "lld";
+                };
+              buildPlatform =
+                (old.buildPlatform or {})
+                // {
+                  useLLVM = true;
+                  linker = "lld";
+                };
               targetPlatform =
                 (old.targetPlatform or {})
                 // {
@@ -245,6 +257,7 @@
             config-ini.check = false;
             hedgehog.check = false;
             fast-logger.check = false;
+            tls.check = false;
 
             # cabal-hoogle = {self, ...}: {
             #   broken = false;
