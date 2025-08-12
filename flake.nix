@@ -63,17 +63,26 @@
           config.replaceStdenv = {pkgs}:
             if pkgs.stdenv.hostPlatform.isLinux
             then
-              pkgs.overrideCC (
-                pkgs.clangStdenv.override (old: {
-                  targetPlatform =
-                    (old.targetPlatform or {})
-                    // {
-                      useLLVM = true;
-                      linker = "lld";
-                    };
-                })
-              )
-              pkgs.llvmPackages.clangUseLLVM
+              pkgs.clangStdenv.override (old: {
+                hostPlatform =
+                  (old.hostPlatform or {})
+                  // {
+                    useLLVM = true;
+                    linker = "lld";
+                  };
+                buildPlatform =
+                  (old.buildPlatform or {})
+                  // {
+                    useLLVM = true;
+                    linker = "lld";
+                  };
+                targetPlatform =
+                  (old.targetPlatform or {})
+                  // {
+                    useLLVM = true;
+                    linker = "lld";
+                  };
+              })
             else pkgs.stdenv;
           # overlays = [
           #   (final: prev:
