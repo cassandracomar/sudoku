@@ -262,10 +262,10 @@
               sharedExecutables = false;
               staticLibraries = true;
               sharedLibraries = false;
+              justStaticExecutables = true;
               custom = drv:
                 pkgs.haskell.lib.compose.overrideCabal (old: {
                   enableSharedExecutables = false;
-                  enableStaticExecutables = true;
                   nativeBuildInputs = (old.nativeBuildInputs or []) ++ [pkgs.autoPatchelfHook];
                   postInstall =
                     (old.postInstall or "")
