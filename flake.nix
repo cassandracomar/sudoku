@@ -47,6 +47,7 @@
             stdenv = pkgs.llvmPackages.libcxxStdenv;
           }).overrideAttrs (old:
             pkgs.lib.optionalAttrs pkgs.stdenv.isLinux {
+              hardeningDisable = (old.hardeningDisable or []) ++ ["fortify"];
               hadrianFlags = (old.hadrianFlags or []) ++ ["-j"];
             });
         haskellPackages = pkgs.callPackage "${inputs.nixpkgs}/pkgs/development/haskell-modules" {
