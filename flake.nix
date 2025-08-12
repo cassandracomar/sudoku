@@ -199,12 +199,12 @@
               };
               patches = [./retrie.patch];
             };
-            cabal-hoogle.source = pkgs.fetchFromGitHub {
-              owner = "cassandracomar";
-              repo = "cabal-hoogle";
-              rev = "c5c12325f2713aa3856cf7b86bc05064484d3c26";
-              sha256 = "sha256-grGuPu1F+Xl2OiYQOfZp7BQR9Kv/vvh+xpnfZdFkhpE=";
-            };
+            # cabal-hoogle.source = pkgs.fetchFromGitHub {
+            #   owner = "cassandracomar";
+            #   repo = "cabal-hoogle";
+            #   rev = "c5c12325f2713aa3856cf7b86bc05064484d3c26";
+            #   sha256 = "sha256-grGuPu1F+Xl2OiYQOfZp7BQR9Kv/vvh+xpnfZdFkhpE=";
+            # };
             stylish-haskell.source = "0.15.1.0";
           };
 
@@ -230,8 +230,16 @@
             config-ini.check = false;
             hedgehog.check = false;
 
-            cabal-hoogle.broken = false;
-            cabal-hoogle.check = false;
+            # cabal-hoogle = {self, ...}: {
+            #   broken = false;
+            #   check = false;
+            #   jailbreak = true;
+            #   extraBuildDepends = [self.cabal-install];
+            #   custom = drv:
+            #     drv.override {
+            #       inherit (self) cabal-install;
+            #     };
+            # };
 
             doctest-parallel.custom = drv:
               drv.overrideAttrs (old: {
@@ -259,13 +267,9 @@
               extraTestToolDepends = with pkgs; [git self.cabal-fmt self.cabal-install];
               extraBuildDepends = with self; [hlint apply-refact ghc-lib-parser-ex refact cabal-add];
               extraSetupDepends = [pkgs.pkg-config];
-              sharedExecutables = false;
-              staticLibraries = true;
-              sharedLibraries = false;
-              justStaticExecutables = true;
+              staticLibraries = false;
               custom = drv:
                 pkgs.haskell.lib.compose.overrideCabal (old: {
-                  enableSharedExecutables = false;
                   postInstall =
                     (old.postInstall or "")
                     + (pkgs.lib.optionalString pkgs.stdenv.hostPlatform.isDarwin ''
@@ -273,7 +277,7 @@
                       find ${ghc}/lib/ghc-9.12.2/lib/aarch64-osx-ghc-9.12.2* -name "*.dylib" -exec ln -sf {} $out/lib/links/ \;
                     '')
                     + (pkgs.lib.optionalString pkgs.stdenv.hostPlatform.isLinux ''
-                      remove-references-to -t ${ghc} $out/bin/haskell-language-server
+
                     '');
                 })
                 (drv.override {stylish-haskell = pkgs.hello;});
@@ -361,7 +365,7 @@
                 cabal-install
                 fourmolu
                 hlint
-                cabal-hoogle
+                # cabal-hoogle
                 stylish-haskell
                 cabal-gild
                 cabal-fmt
