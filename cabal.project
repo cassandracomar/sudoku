@@ -12,10 +12,6 @@ jobs: $ncpus
 semaphore: True
 split-sections: True
 executable-dynamic: True
-package *
-    ghc-options:
-                 -fPIC
-                 -fPIE
 program-options
     ghc-options:
                  -- LLVM options
