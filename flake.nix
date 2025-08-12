@@ -278,6 +278,7 @@
                     '')
                     + (pkgs.lib.optionalString pkgs.stdenv.hostPlatform.isLinux ''
                       find dist/build -name "*.so" -exec mv {} $out/lib/ \;
+                      ldd $out/bin/haskell-language-server
                     '');
                   postFixup =
                     (old.postFixup or "")
