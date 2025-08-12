@@ -43,9 +43,13 @@
         # });
         libcxxStdenv =
           pkgs.overrideCC (
-            pkgs.llvmPackages.libcxxStdenv.override {
-              targetPlatform.useLLVM = true;
-            }
+            pkgs.llvmPackages.libcxxStdenv.override (old: {
+              targetPlatform =
+                (old.targetPlatform or {})
+                // {
+                  useLLVM = true;
+                };
+            })
           )
           pkgs.llvmPackages.clangUseLLVM;
         ghc =
