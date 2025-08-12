@@ -65,17 +65,14 @@
             })
           )
           pkgs.llvmPackages.clangUseLLVM;
-        targetPackages = pkgs.pkgsLLVM.targetPackages;
         ghc =
           (pkgs.haskell.compiler.ghc9122.override {
-            inherit targetPackages;
+            inherit (pkgs.pkgsLLVM) targetPackages pkgsBuildTarget pkgsHostTarget buildPackages;
             useLLVM = true;
             stdenv =
               if pkgs.stdenv.isLinux
               then libcxxStdenv
               else pkgs.stdenv;
-            pkgsBuildTarget = targetPackages;
-            pkgsHostTarget = targetPackages;
           }).overrideAttrs (old:
             pkgs.lib.optionalAttrs pkgs.stdenv.isLinux {
               hardeningDisable = (old.hardeningDisable or []) ++ ["fortify"];
