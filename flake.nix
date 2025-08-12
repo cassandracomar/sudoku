@@ -64,7 +64,9 @@
                 };
             })
           )
-          pkgs.llvmPackages.clangUseLLVM;
+          (pkgs.llvmPackages.clangUseLLVM.override {
+            inherit (pkgs.llvmPackages) bintools;
+          });
         targetPackages = {
           stdenv = libcxxStdenv;
         };
