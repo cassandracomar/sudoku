@@ -29,7 +29,7 @@ program-options
                  -pgmlas=clang
                  -pgmc=clang
                  -pgml=clang
-                 -pgmo=opt
+                 -pgmlo=opt
                  -pgmlc=llc
                  -opta-O3
                  -opta-flto=thin
