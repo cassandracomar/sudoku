@@ -273,8 +273,8 @@
                   postInstall =
                     (old.postInstall or "")
                     + (pkgs.lib.optionalString pkgs.stdenv.hostPlatform.isDarwin ''
-                      find $out/lib/ghc-9.12.2/lib/aarch64-osx-ghc-9.12.2* -name "*.dylib" -exec ln -sf {} $out/lib/links/ \;
-                      find ${ghc}/lib/ghc-9.12.2/lib/aarch64-osx-ghc-9.12.2* -name "*.dylib" -exec ln -sf {} $out/lib/links/ \;
+                      find $out/lib/ghc-${ghc.version}/lib/aarch64-osx-ghc-${ghc.version}* -name "*.dylib" -exec ln -sf {} $out/lib/links/ \;
+                      find ${ghc}/lib/ghc-${ghc.version}/lib/aarch64-osx-ghc-${ghc.version}* -name "*.dylib" -exec ln -sf {} $out/lib/links/ \;
                     '')
                     + (pkgs.lib.optionalString pkgs.stdenv.hostPlatform.isLinux ''
                       find dist/build -name "*.so" -exec mv {} $out/lib/ \;
