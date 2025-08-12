@@ -23,9 +23,7 @@ program-options
                  -msse4
                  -msse4.2
                  -mavx512cd
-                 -mavx512er
                  -mavx512f
-                 -mavx512pf
                  -pgmlas=clang
                  -pgmc=clang
                  -pgml=clang
@@ -43,7 +41,7 @@ program-options
                  -optlo=--thinlto-bc
                  -optlc-O3
                  -optlc-mcpu=znver4
-                 -optlc-mattr=+neon
+                 -- -optlc-mattr=+neon
                  -optlas-O3
                  -optlas-mcpu=znver4
                  -optlm-O3
