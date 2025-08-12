@@ -7,7 +7,7 @@ executable-profiling: False
 library-profiling: False
 profiling: False
 profiling-detail: none
-allow-newer: all
+-- allow-newer: all
 jobs: $ncpus
 semaphore: True
 split-sections: True
