@@ -11,7 +11,7 @@ allow-newer: all
 jobs: $ncpus
 semaphore: True
 split-sections: True
-executable-shared: True
+executable-dynamic: True
 program-options
     ghc-options:
                  -- LLVM options
