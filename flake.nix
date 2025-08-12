@@ -69,7 +69,7 @@
             useLLVM = true;
           }
           // pkgs.lib.optionalAttrs pkgs.stdenv.isLinux {
-            inherit (pkgs.pkgsLLVM) targetPackages pkgsBuildTarget pkgsHostTarget buildPackages;
+            inherit (pkgs.pkgsLLVM) targetPackages pkgsBuildTarget pkgsHostTarget;
             stdenv = libcxxStdenv;
           })).overrideAttrs (old:
           pkgs.lib.optionalAttrs pkgs.stdenv.isLinux {
