@@ -266,7 +266,6 @@
               custom = drv:
                 pkgs.haskell.lib.compose.overrideCabal (old: {
                   enableSharedExecutables = false;
-                  nativeBuildInputs = (old.nativeBuildInputs or []) ++ [pkgs.autoPatchelfHook];
                   postInstall =
                     (old.postInstall or "")
                     + (pkgs.lib.optionalString pkgs.stdenv.hostPlatform.isDarwin ''
