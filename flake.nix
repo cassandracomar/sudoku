@@ -225,6 +225,7 @@
             cryptonite.check = false;
             test-ini-compat.check = false;
             config-ini.check = false;
+            hedgehog.check = false;
 
             cabal-hoogle.broken = false;
             cabal-hoogle.check = false;
