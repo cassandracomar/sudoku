@@ -48,6 +48,7 @@
                 (old.targetPlatform or {})
                 // {
                   useLLVM = true;
+                  linker = "lld";
                 };
             })
           )
