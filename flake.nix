@@ -229,6 +229,7 @@
             test-ini-compat.check = false;
             config-ini.check = false;
             hedgehog.check = false;
+            fast-logger.check = false;
 
             # cabal-hoogle = {self, ...}: {
             #   broken = false;
