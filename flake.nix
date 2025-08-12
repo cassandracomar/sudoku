@@ -44,6 +44,7 @@
         ghc =
           (pkgs.haskell.compiler.ghc9122.override {
             useLLVM = true;
+            stdenv = pkgs.llvmPackages.libcxxStdenv;
           }).overrideAttrs (old:
             pkgs.lib.optionalAttrs pkgs.stdenv.isLinux {
               hadrianFlags = (old.hadrianFlags or []) ++ ["-j"];
@@ -52,6 +53,7 @@
           inherit ghc;
           haskellLib = pkgs.haskell.lib.compose;
           buildHaskellPackages = haskellPackages;
+          stdenv = pkgs.llvmPackages.libcxxStdenv;
           compilerConfig = pkgs.callPackage "${inputs.nixpkgs}/pkgs/development/haskell-modules/configuration-ghc-9.12.x.nix" {
             haskellLib = pkgs.haskell.lib.compose;
           };
@@ -59,29 +61,29 @@
       in {
         _module.args.pkgs = import inputs.nixpkgs {
           inherit system;
-          config.replaceStdenv = {pkgs}:
-            if pkgs.stdenv.hostPlatform.isLinux
-            then pkgs.llvmPackages.libcxxStdenv
-            else pkgs.stdenv;
-          overlays = [
-            (final: prev:
-              prev.lib.optionalAttrs prev.stdenv.isLinux rec {
-                python3 = prev.python3.override {
-                  packageOverrides = pyfinal: pyprev: {
-                    pycparser = pyprev.pycparser.overrideAttrs (old: {
-                      unittestCheckPhase = "true";
-                    });
-                    sphinx = pyprev.sphinx.overrideAttrs (old: {
-                      pytestCheckPhase = "true";
-                      unittestCheckPhase = "true";
-                      pythonImportsCheckPhase = "true";
-                    });
-                  };
-                };
-                python3Packages = python3.pkgs;
-                sphinx = python3Packages.sphinx;
-              })
-          ];
+          # config.replaceStdenv = {pkgs}:
+          #   if pkgs.stdenv.hostPlatform.isLinux
+          #   then pkgs.llvmPackages.libcxxStdenv
+          #   else pkgs.stdenv;
+          # overlays = [
+          #   (final: prev:
+          #     prev.lib.optionalAttrs prev.stdenv.isLinux rec {
+          #       python3 = prev.python3.override {
+          #         packageOverrides = pyfinal: pyprev: {
+          #           pycparser = pyprev.pycparser.overrideAttrs (old: {
+          #             unittestCheckPhase = "true";
+          #           });
+          #           sphinx = pyprev.sphinx.overrideAttrs (old: {
+          #             pytestCheckPhase = "true";
+          #             unittestCheckPhase = "true";
+          #             pythonImportsCheckPhase = "true";
+          #           });
+          #         };
+          #       };
+          #       python3Packages = python3.pkgs;
+          #       sphinx = python3Packages.sphinx;
+          #     })
+          # ];
         };
         haskellProjects.ghc912 = {
           defaults.packages = {}; # Disable scanning for local package
