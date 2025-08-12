@@ -65,13 +65,22 @@
             })
           )
           pkgs.llvmPackages.clangUseLLVM;
+        targetPackages = {
+          stdenv = libcxxStdenv;
+        };
         ghc = (pkgs.haskell.compiler.ghc9122.override ({
             useLLVM = true;
           }
           // pkgs.lib.optionalAttrs pkgs.stdenv.isLinux {
-            inherit (pkgs.pkgsLLVM) targetPackages pkgsHostTarget;
+            inherit targetPackages;
             stdenv = libcxxStdenv;
-            pkgsBuildTarget = pkgs.pkgsLLVM;
+            buildPackages = targetPackages;
+            pkgsHostTarget = {
+              inherit targetPackages;
+            };
+            pkgsBuildTarget = {
+              inherit targetPackages;
+            };
           })).overrideAttrs (old:
           pkgs.lib.optionalAttrs pkgs.stdenv.isLinux {
             hardeningDisable = (old.hardeningDisable or []) ++ ["fortify"];
