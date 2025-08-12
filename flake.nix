@@ -65,11 +65,16 @@
             })
           )
           pkgs.llvmPackages.clangUseLLVM;
+        pkgs' = import inputs.nixpkgs {
+          inherit system;
+          config.replaceStdenv = {...}: libcxxStdenv;
+        };
         targetPackages =
-          (import inputs.nixpkgs {
-            inherit system;
-            config.replaceStdenv = {...}: libcxxStdenv;
-          }).targetPackages;
+          pkgs'.targetPackages
+          // {
+            llvmPackages = pkgs.llvmPackages;
+            buildPackages = pkgs.buildPackages // {llvmPackages = pkgs.buildPackages.llvmPackages;};
+          };
         ghc =
           (pkgs.haskell.compiler.ghc9122.override {
             inherit targetPackages;
