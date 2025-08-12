@@ -41,37 +41,9 @@
         #     hash = "sha256-LZ10czBn5oaKMHQ8xguC6VZa7wvEgPRu6oWt/22QaDs=";
         #   };
         # });
-        libcxxStdenv =
-          pkgs.overrideCC (
-            pkgs.llvmPackages.libcxxStdenv.override (old: {
-              hostPlatform =
-                (old.hostPlatform or {})
-                // {
-                  useLLVM = true;
-                  linker = "lld";
-                };
-              buildPlatform =
-                (old.buildPlatform or {})
-                // {
-                  useLLVM = true;
-                  linker = "lld";
-                };
-              targetPlatform =
-                (old.targetPlatform or {})
-                // {
-                  useLLVM = true;
-                  linker = "lld";
-                };
-            })
-          )
-          pkgs.llvmPackages.clangUseLLVM;
         ghc =
           (pkgs.haskell.compiler.ghc9122.override {
             useLLVM = true;
-            stdenv =
-              if pkgs.stdenv.isLinux
-              then libcxxStdenv
-              else pkgs.stdenv;
           }).overrideAttrs (old:
             pkgs.lib.optionalAttrs pkgs.stdenv.isLinux {
               hardeningDisable = (old.hardeningDisable or []) ++ ["fortify"];
@@ -81,10 +53,6 @@
           inherit ghc;
           haskellLib = pkgs.haskell.lib.compose;
           buildHaskellPackages = haskellPackages;
-          stdenv =
-            if pkgs.stdenv.isLinux
-            then libcxxStdenv
-            else pkgs.stdenv;
           compilerConfig = pkgs.callPackage "${inputs.nixpkgs}/pkgs/development/haskell-modules/configuration-ghc-9.12.x.nix" {
             haskellLib = pkgs.haskell.lib.compose;
           };
@@ -92,10 +60,32 @@
       in {
         _module.args.pkgs = import inputs.nixpkgs {
           inherit system;
-          # config.replaceStdenv = {pkgs}:
-          #   if pkgs.stdenv.hostPlatform.isLinux
-          #   then pkgs.llvmPackages.libcxxStdenv
-          #   else pkgs.stdenv;
+          config.replaceStdenv = {pkgs}:
+            if pkgs.stdenv.hostPlatform.isLinux
+            then pkgs.overrideCC (
+              pkgs.llvmPackages.libcxxStdenv.override (old: {
+                hostPlatform =
+                  (old.hostPlatform or {})
+                  // {
+                    useLLVM = true;
+                    linker = "lld";
+                  };
+                buildPlatform =
+                  (old.buildPlatform or {})
+                  // {
+                    useLLVM = true;
+                    linker = "lld";
+                  };
+                targetPlatform =
+                  (old.targetPlatform or {})
+                  // {
+                    useLLVM = true;
+                    linker = "lld";
+                  };
+              })
+            )
+              pkgs.llvmPackages.clangUseLLVM
+            else pkgs.stdenv;
           # overlays = [
           #   (final: prev:
           #     prev.lib.optionalAttrs prev.stdenv.isLinux rec {
