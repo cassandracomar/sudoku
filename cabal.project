@@ -30,26 +30,27 @@ program-options
                  -pgml=clang
                  -pgmlo=opt
                  -pgmlc=llc
+                 -opta-mcpu=znver4
+                 -optl-mcpu=znver4
+                 -optlo-mcpu=znver4
+                 -optlc-mcpu=znver4
+                 -optlas-mcpu=znver4
+                 -optlm-mcpu=znver4
                  -opta-O3
                  -opta-flto=thin
-                 -opta-mcpu=znver4
                  -optl-O3
-                 -optl-mcpu=znver4
                  -optl-flto=thin
                  -optl-fuse-ld=lld
                  -fllvm
                  -fPIE
+                 -fPIC
                  -optlo-O3
-                 -optlo-mcpu=znver4
                  -optlo=--thinlto-bc
                  -- -optlo-passes=default<O3>,load-store-vectorizer,slp-vectorizer,vector-combine,loop-vectorize,loop-idiom-vectorize
                  -optlc-O3
-                 -optlc-mcpu=znver4
                  -- -optlc-mattr=+neon
                  -optlas-O3
-                 -optlas-mcpu=znver4
                  -optlm-O3
-                 -optlm-mcpu=znver4
                  -fsplit-sections
                  -funbox-strict-fields
                  -- inline aggressively to ensure lenses/polymorphic functions are fully saturated at concrete types
