@@ -61,7 +61,7 @@
           inherit system;
           config.replaceStdenv = {pkgs}:
             if pkgs.stdenv.hostPlatform.isLinux
-            then pkgs.clangStdenv
+            then pkgs.llvmPackages.libcxxStdenv
             else pkgs.stdenv;
           overlays = [
             (final: prev:
