@@ -406,6 +406,7 @@
         # packages.llvm-hs = config.haskellProjects.ghc912.outputs.finalPackages.llvm-hs;
         packages.stdenv = pkgs.stdenv;
         packages.llvm = pkgs.llvmPackages.llvm;
+        packages.libcxxStdenv = libcxxStdenv;
 
         packages.default = self'.packages.sudoku;
         formatter = inputs.nixpkgs.legacyPackages.${system}.alejandra;
