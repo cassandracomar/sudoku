@@ -71,7 +71,7 @@
           // pkgs.lib.optionalAttrs pkgs.stdenv.isLinux {
             inherit (pkgs.pkgsLLVM) targetPackages pkgsHostTarget;
             stdenv = libcxxStdenv;
-            pkgsBuildTarget = pkgs.pkgsLLVM.targetPackages;
+            pkgsBuildTarget = pkgs.pkgsLLVM;
           })).overrideAttrs (old:
           pkgs.lib.optionalAttrs pkgs.stdenv.isLinux {
             hardeningDisable = (old.hardeningDisable or []) ++ ["fortify"];
