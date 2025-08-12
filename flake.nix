@@ -260,7 +260,7 @@
               extraBuildDepends = with self; [hlint apply-refact ghc-lib-parser-ex refact cabal-add];
               extraSetupDepends = [pkgs.pkg-config];
               sharedExecutables = false;
-              staticExecutables = true;
+              staticLibraries = true;
               sharedLibraries = false;
               custom = drv:
                 pkgs.haskell.lib.compose.overrideCabal (old: {
