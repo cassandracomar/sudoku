@@ -267,6 +267,10 @@
                     + (pkgs.lib.optionalString pkgs.stdenv.hostPlatform.isDarwin ''
                       find $out/lib/ghc-9.12.2/lib/aarch64-osx-ghc-9.12.2* -name "*.dylib" -exec ln -sf {} $out/lib/links/ \;
                       find ${ghc}/lib/ghc-9.12.2/lib/aarch64-osx-ghc-9.12.2* -name "*.dylib" -exec ln -sf {} $out/lib/links/ \;
+                    '')
+                    + (pkgs.lib.optionalString pkgs.stdenv.hostPlatform.isLinux ''
+                      find $out/lib/ghc-9.12.2/lib/x86_64-unknown-linux-9.12.2* -name "*.so" -exec ln -sf {} $out/lib/links/ \;
+                      find ${ghc}/lib/ghc-9.12.2/lib/x86_64-unknown-linux-9.12.2* -name "*.so" -exec ln -sf {} $out/lib/links/ \;
                     '');
                 })
                 (drv.override {stylish-haskell = pkgs.hello;});
