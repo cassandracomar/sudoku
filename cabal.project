@@ -13,6 +13,19 @@ semaphore: True
 split-sections: True
 program-options
     ghc-options:
+                 -mavx
+                 -mavx2
+                 -mbmi
+                 -mbmi2
+                 -msse
+                 -msse2
+                 -msse3
+                 -msse4
+                 -msse4.2
+                 -mavx512cd
+                 -mavx512er
+                 -mavx512f
+                 -mavx512pf
                  -opta-O3
                  -opta-flto=thin
                  -- -opta-funified-lto
