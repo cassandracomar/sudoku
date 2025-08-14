@@ -32,21 +32,39 @@ program-options
                  -pgml=clang
                  -pgmlo=opt
                  -pgmlc=llc
-                 -opta-mcpu=znver4
-                 -optl-mcpu=znver4
-                 -optlo-mcpu=znver4
-                 -optlc-mcpu=znver4
-                 -optlas-mcpu=znver4
-                 -optlm-mcpu=znver4
+                 -opta-mcpu=znver5
+                 -optl-mcpu=znver5
+                 -optlo-mcpu=znver5
+                 -optlc-mcpu=znver5
+                 -optlas-mcpu=znver5
+                 -optlm-mcpu=znver5
                  -fPIE
                  -fPIC
-                 -- -optlo-O3
-                 -optlo=--thinlto-bc
+                 -optlo--polly
+                 -optlo--polly-2nd-level-tiling
+                 -optlo--polly-detect-full-functions
+                 -optlo--polly-enable-simplify
+                 -optlo--polly-parallel
+                 -optlo--polly-pattern-matching-based-opts
+                 -optlo--polly-postopts
+                 -optlo--polly-register-tiling
+                 -optlo--polly-reschedule
+                 -optlo--polly-stmt-granularity=scalar-indep
+                 -optlo--polly-tiling
+                 -optlo--polly-vectorizer=stripmine
+                 -optlo-passes=default<O3>,load-store-vectorizer,slp-vectorizer,vector-combine,loop-vectorize,loop-idiom-vectorize,simplifycfg,select-optimize,mem2reg,dce,deadargelim,early-cse,fix-irreducible,instcombine,instsimplify,interleaved-access,interleaved-load-combine,loop-data-prefetch,loop-extract,loop-reduce,loop-simplify,loop-unroll
+                 -optlo--thinlto-bc
+                 -optlo--lto-embed-bitcode=optimized
+                 -optlo--tailcallopt
+                 -optlo--tail-predication=enabled-no-reductions
+                 -optlo--sve-tail-folding=reductions
+                 -optlo--instcombine-code-sinking
+                 -optlo--enable-loop-simplifycfg-term-folding
+                 -optlo--enable-load-pre
+                 -optlo--enable-load-in-loop-pre
                  -optlc-O3
                  -optlas-O3
                  -optlm-O3
-                 -- -optlc-mattr=+neon
-                 -optlo-passes=default<O3>,load-store-vectorizer,slp-vectorizer,vector-combine,loop-vectorize,loop-idiom-vectorize
 
                  -- everything else
                  -opta-O3
