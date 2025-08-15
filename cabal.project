@@ -11,67 +11,132 @@ allow-newer: all
 jobs: $ncpus
 semaphore: True
 split-sections: True
+shared: True
 executable-dynamic: True
 program-options
     ghc-options:
                  -- LLVM options
-                 -fllvm
-                 -mavx
-                 -mavx2
-                 -mbmi
-                 -mbmi2
-                 -msse
-                 -msse2
-                 -msse3
-                 -msse4
-                 -msse4.2
-                 -mavx512cd
-                 -mavx512f
-                 -pgmlas=clang
-                 -pgmc=clang
-                 -pgml=clang
-                 -pgmlo=opt
-                 -pgmlc=llc
-                 -opta-mcpu=znver5
-                 -optl-mcpu=znver5
-                 -optlo-mcpu=znver5
-                 -optlc-mcpu=znver5
-                 -optlas-mcpu=znver5
-                 -optlm-mcpu=znver5
-                 -fPIE
-                 -fPIC
-                 -optlo--polly
-                 -optlo--polly-2nd-level-tiling
-                 -optlo--polly-detect-full-functions
-                 -optlo--polly-enable-simplify
-                 -optlo--polly-parallel
-                 -optlo--polly-pattern-matching-based-opts
-                 -optlo--polly-postopts
-                 -optlo--polly-register-tiling
-                 -optlo--polly-reschedule
-                 -optlo--polly-stmt-granularity=scalar-indep
-                 -optlo--polly-tiling
-                 -optlo--polly-vectorizer=stripmine
-                 -optlo-passes=default<O3>,load-store-vectorizer,slp-vectorizer,vector-combine,loop-vectorize,loop-idiom-vectorize,simplifycfg,select-optimize,mem2reg,dce,deadargelim,early-cse,fix-irreducible,instcombine,instsimplify,interleaved-access,interleaved-load-combine,loop-data-prefetch,loop-extract,loop-reduce,loop-simplify,loop-unroll
-                 -optlo--thinlto-bc
-                 -optlo--lto-embed-bitcode=optimized
-                 -optlo--tailcallopt
-                 -optlo--tail-predication=enabled-no-reductions
-                 -optlo--sve-tail-folding=reductions
-                 -optlo--instcombine-code-sinking
-                 -optlo--enable-loop-simplifycfg-term-folding
-                 -optlo--enable-load-pre
-                 -optlo--enable-load-in-loop-pre
-                 -optlc-O3
-                 -optlas-O3
-                 -optlm-O3
+                 -- -fllvm
+                 -- -mavx
+                 -- -mavx2
+                 -- -mbmi
+                 -- -mbmi2
+                 -- -msse
+                 -- -msse2
+                 -- -msse3
+                 -- -msse4
+                 -- -msse4.2
+                 -- -mavx512cd
+                 -- -mavx512f
+                 -- -pgmlas=clang
+                 -- -pgmc=clang
+                 -- -pgmlo=opt
+                 -- -pgmlc=llc
+                 -- -opta-mcpu=znver5
+                 -- -optl-mcpu=znver5
+                 -- -optlo-mcpu=znver5
+                 -- -optlc-mcpu=znver5
+                 -- -optlas-mcpu=znver5
+                 -- -optlm-mcpu=znver5
+                 -- -fPIE
+                 -- -fPIC
+                 -- -optlo--polly
+                 -- -optlo--polly-2nd-level-tiling
+                 -- -optlo--polly-detect-full-functions
+                 -- -optlo--polly-enable-simplify
+                 -- -optlo--polly-parallel
+                 -- -optlo--polly-pattern-matching-based-opts
+                 -- -optlo--polly-postopts
+                 -- -optlo--polly-register-tiling
+                 -- -optlo--polly-reschedule
+                 -- -optlo--polly-stmt-granularity=scalar-indep
+                 -- -optlo--polly-tiling
+                 -- -optlo--polly-vectorizer=stripmine
+                 -- -optlo-passes=default<O3>,load-store-vectorizer,slp-vectorizer,vector-combine,loop-vectorize,loop-idiom-vectorize,simplifycfg,select-optimize,mem2reg,dce,deadargelim,early-cse,fix-irreducible,instcombine,instsimplify,interleaved-access,interleaved-load-combine,loop-data-prefetch,loop-extract,loop-reduce,loop-simplify,loop-unroll
+                 -- -optlo--thinlto-bc
+                 -- -optlo--lto-embed-bitcode=optimized
+                 -- -optlo--tailcallopt
+                 -- -optlo--tail-predication=enabled-no-reductions
+                 -- -optlo--sve-tail-folding=reductions
+                 -- -optlo--instcombine-code-sinking
+                 -- -optlo--instcombine-negator-enabled
+                 -- -optlo--enable-loop-simplifycfg-term-folding
+                 -- -optlo--enable-load-pre
+                 -- -optlo--enable-load-in-loop-pre
+                 -- -optlo--iterative-counter-promotion
+                 -- -optlo--cs-profile-generate
+                 -- -optlo--cs-profile-path=/tmp/profdata/
+                 -- -optlo--thread-model=single
+                 -- -optlc-O3
+                 -- -optlc--polly
+                 -- -optlc--polly-2nd-level-tiling
+                 -- -optlc--polly-detect-full-functions
+                 -- -optlc--polly-enable-simplify
+                 -- -optlc--polly-parallel
+                 -- -optlc--polly-pattern-matching-based-opts
+                 -- -optlc--polly-postopts
+                 -- -optlc--polly-register-tiling
+                 -- -optlc--polly-reschedule
+                 -- -optlc--polly-stmt-granularity=scalar-indep
+                 -- -optlc--polly-tiling
+                 -- -optlc--polly-vectorizer=stripmine
+                 -- -optlc--enable-cse-in-irtranslator
+                 -- -optlc--enable-cse-in-legalizer
+                 -- -optlc--enable-load-in-loop-pre
+                 -- -optlc--enable-load-pre
+                 -- -optlc--enable-loop-simplifycfg-term-folding
+                 -- -optlc--hot-cold-split
+                 -- -optlc--incremental-linker-compatible
+                 -- -optlc--instcombine-code-sinking
+                 -- -optlc--instcombine-negator-enabled
+                 -- -optlc--iterative-counter-promotion
+                 -- -optlc--lto-embed-bitcode=optimized
+                 -- -optlc--separate-named-sections
+                 -- -optlc--split-machine-functions
+                 -- -optlc--sve-tail-folding=reductions
+                 -- -optlc--tail-predication=enabled-no-reductions
+                 -- -optlc--tailcallopt
+                 -- -optlc--thinlto-assume-merged
+                 -- -optlc--cs-profile-generate
+                 -- -optlc--cs-profile-path=/tmp/profdata/
+                 -- -optlas-fcs-profile-generate=/tmp/profdata/
+                 -- -optlas-fprofile-instr-generate=/tmp/profdata/sudoku.instrprof
+                 -- -optlas-fprofile-generate=/tmp/profdata
+                 -- -optlc--thread-model=single
+                 -- -optlas-O3
+                 -- -optlas-flto=thin
+                 -- -optlas-fPIC
+                 -- -optlas-fPIE
+                 -- -optlas-ffat-lto-objects
+                 -- -optlas-funified-lto
+                 -- -optlm-O3
 
                  -- everything else
+                 -pgml=gcc
+                 -pgma=gcc
                  -opta-O3
-                 -optl-O3
                  -opta-flto=thin
+                 -opta-fuse-linker-plugin
+                 -- -opta-funified-lto
+                 -opta-ffat-lto-objects
+                 -opta-fauto-profile=profile.afdo
+                 -- -opta-fsplit-lto-unit
+                 -optl-O3
+                 -optl-fuse-linker-plugin
+                 -- -optl-fsplit-lto-unit
                  -optl-flto=thin
-                 -optl-fuse-ld=lld
+                 -optl-fuse-ld=gold
+                 -- -optl--for-linker=--lto-O3
+                 -optl-fauto-profile=profile.afdo
+                 -optl--for-linker=--gc-sections
+                 -optl--for-linker=-O3
+                 -- -optl-fPIC
+                 -- -optl-fPIE
+                 -optl-ffat-lto-objects
+                 -- -optl-funified-lto
+                 -- -optl-fcs-profile-generate=/tmp/profdata
+                 -- -optl-fprofile-instr-generate=/tmp/profdata/sudoku.instrprof
+                 -- -optl-fprofile-generate=/tmp/profdata
                  -fsplit-sections
                  -funbox-strict-fields
                  -- inline aggressively to ensure lenses/polymorphic functions are fully saturated at concrete types
@@ -88,8 +153,8 @@ program-options
                  -fdmd-unbox-width=20
                  -fdicts-cheap
                  -fdo-clever-arg-eta-expansion
-                 -- -flocal-float-out
-                 -- -flocal-float-out-top-level
+                 -flocal-float-out
+                 -flocal-float-out-top-level
                  -- giving the specializer more room to chug makes the generated core more closely match the
                  -- source program. or at least, I can read it more easily and recognize what's happening
                  -- where.

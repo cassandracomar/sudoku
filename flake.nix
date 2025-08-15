@@ -103,6 +103,43 @@
             haskellLib = pkgs.haskell.lib.compose;
           };
         };
+        autofdo = pkgs.stdenv.mkDerivation {
+          name = "autofdo";
+          version = "0.30.1";
+          src = pkgs.fetchFromGitHub {
+            owner = "google";
+            repo = "autofdo";
+            rev = "d4daf249aad2531ac3c96d2a3c46cb75c00bfcb2";
+            sha256 = "sha256-HCT8LPu48Vd/CS+G53vPk7tDQAmd7zANtcItHaniYnA=";
+            fetchSubmodules = true;
+          };
+          buildInputs = with pkgs; [libunwind gflags openssl openssl.dev elfutils zstd.dev zstd protobufc protobufc.dev];
+          nativeBuildInputs = with pkgs; [protobuf_29 cmake clang git pkg-config ninja autoPatchelfHook];
+          cmakeFlags = [
+            "-DENABLE_TOOL=LLVM"
+            "-DENABLE_TOOL=GCOV"
+            "-DCMAKE_C_COMPILER=clang"
+            "-DCMAKE_CXX_COMPILER=clang++"
+            "-DCMAKE_BUILD_TYPE=Release"
+            "-DBUILD_SHARED=On"
+          ];
+
+          postInstall = ''
+            ls -l
+            ls -l bin/
+            mkdir -p $out/bin
+            install -m755 *_gcov $out/bin/
+            ldd create_gcov
+            install -m755 profile_merger $out/bin/profile_merger
+            install -m644 libperf_proto.a $out/lib/libperf_proto.a
+            install -m644 third_party/glog/libglog.so.1 $out/lib/libglog.so.1
+          '';
+
+          fixupPhase = ''
+            addAutoPatchelfSearchPath $out/lib/
+            autoPatchelf $out/bin/*
+          '';
+        };
       in {
         _module.args.pkgs = import inputs.nixpkgs {
           inherit system;
@@ -417,9 +454,12 @@
                 cabal-gild
                 cabal-fmt
                 haskell-language-server
-                ;
-              inherit (pkgs.llvmPackages) bintools libllvm llvm clangUseLLVM;
-              inherit (pkgs.llvmPackages.libllvm) lib dev;
+              ;
+              # inherit (pkgs.llvmPackages) bintools libllvm llvm clangUseLLVM;
+              # inherit (pkgs.llvmPackages.libllvm) lib dev;
+              inherit (pkgs.stdenv) cc;
+              inherit (pkgs.stdenv.cc) bintools;
+              inherit autofdo;
               graphviz = inputs.nixpkgs.legacyPackages.${system}.graphviz;
             };
             mkShellArgs = {
@@ -436,6 +476,7 @@
         packages.stdenv = pkgs.stdenv;
         packages.llvm = pkgs.llvmPackages.llvm;
         packages.libcxxStdenv = libcxxStdenv;
+        packages.autofdo = autofdo;
 
         packages.default = self'.packages.sudoku;
         formatter = inputs.nixpkgs.legacyPackages.${system}.alejandra;
