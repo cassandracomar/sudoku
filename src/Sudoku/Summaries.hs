@@ -14,7 +14,7 @@ import Control.Lens
 import Control.Lens.Extras (is)
 import Control.Monad (forM_, guard)
 import Control.Monad.ST (ST, runST)
-import Data.BitSet (bsfolded)
+import Data.Word16Set (bsfolded)
 import Data.Containers.ListUtils (nubOrd)
 import Data.Default (Default (def))
 import Data.Functor (($>))
@@ -47,7 +47,7 @@ import Sudoku.Grid (
 import TextShow (TextShow (showb), toString)
 import TextShow.Data.List (showbListWith)
 
-import Data.BitSet qualified as A.BS
+import Data.Word16Set qualified as A.BS
 import Data.Foldable qualified as F
 import Data.HashSet qualified as HS
 import Data.IntMap qualified as MS
@@ -61,7 +61,7 @@ import Data.Vector.Unboxed qualified as VU
 import Data.Vector.Unboxed.Base qualified as MVU
 
 -- | `A.BS.BitSet` with all digits marked
-completeDigitSet :: A.BS.BitSet Word16 a
+completeDigitSet :: A.BS.BitSet a
 completeDigitSet = A.BS.BitSet 0b111111111
 
 newtype Union a = Union {runUnion :: a}
@@ -384,11 +384,11 @@ cellUpdating f = ifolding (\summs -> V.mapMaybe (\loc -> fmap (loc,) (f loc summ
 
 -- this doesn't include everything... need to figure out how to make the tuples search fit into this scheme
 data ExplainDesc a
-    = AlreadyKnown !RegionIndicator !Int !(A.BS.BitSet Word16 a)
+    = AlreadyKnown !RegionIndicator !Int !(A.BS.BitSet a)
     | SinglePoss !RegionIndicator !Int !a
-    | SingleLoc !RegionIndicator !Int !(A.BS.BitSet Word16 a)
+    | SingleLoc !RegionIndicator !Int !(A.BS.BitSet a)
     | LookedForPointing
-    | TupleDesc !RegionIndicator !Int !(A.BS.BitSet Word16 a) !(A.BS.BitSet Word16 a)
+    | TupleDesc !RegionIndicator !Int !(A.BS.BitSet a) !(A.BS.BitSet a)
     deriving (Eq, Ord, Generic)
 
 instance (TextShow a, Enum a) => TextShow (ExplainDesc a) where
@@ -460,7 +460,7 @@ filterSummariesByCount c = filterSummaryByCount Row c . filterSummaryByCount Col
 {-# INLINE filterSummariesByCount #-}
 
 findInSummary ::
-    (Enum k) => RegionSummaries (M.MonoidalIntMap (Sum Word16)) -> RegionIndicator -> Word8 -> A.BS.BitSet Word16 k
+    (Enum k) => RegionSummaries (M.MonoidalIntMap (Sum Word16)) -> RegionIndicator -> Word8 -> A.BS.BitSet k
 findInSummary summs ri i = A.BS.bitSetOf (ix ri . ix (fromIntegral i) . itraversed . asIndex . enumerated) summs
 {-# INLINE findInSummary #-}
 

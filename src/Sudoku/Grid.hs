@@ -31,7 +31,7 @@ import TextShow.Data.Char (showbLitChar)
 import TextShow.Data.List (showbListWith)
 
 -- import Data.Array.Accelerate qualified as A
-import Data.BitSet qualified as A.BS
+import Data.Word16Set qualified as A.BS
 import Data.List qualified as L
 import Data.Set qualified as S
 import Data.Text.Lazy.IO qualified as T

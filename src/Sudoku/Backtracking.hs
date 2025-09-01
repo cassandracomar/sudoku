@@ -13,7 +13,7 @@ import Control.Monad.Reader (ReaderT (runReaderT))
 import Control.Monad.Trans (lift)
 import Control.Monad.Trans.Writer.Lazy (WriterT (runWriterT))
 import Control.Monad.TransLogicState.Class (observeT)
-import Data.BitSet (bsfolded)
+import Data.Word16Set (bsfolded)
 import Data.List (sortBy)
 import Data.Monoid (Sum (Sum))
 import Data.Utils ((>>>>))
@@ -21,11 +21,11 @@ import Data.Word (Word16)
 import Sudoku.Cell
 import Sudoku.Grid
 
-import Data.BitSet qualified as A.BS
+import Data.Word16Set qualified as A.BS
 import Data.Set qualified as S
 import Data.Vector.Unboxed qualified as VU
 
-type Contradicted a = A.BS.BitSet Word16 a
+type Contradicted a = A.BS.BitSet a
 
 type SudokuT m a r = LogicStateT (Contradicted a) (Grid a) m r
 
@@ -42,7 +42,7 @@ runSudokuT ::
     forall a m.
     (Monad m, MonadFail m) =>
     SolverOptions -> Grid a -> SudokuT (ReaderT SolverOptions (WriterT (BacktrackStateLog a) m)) a (Grid a) -> m (Grid a)
-runSudokuT opts = (A.BS.empty @Word16 @a,) >>> observeT >>>> flip runReaderT opts >>> runWriterT >>> fmap fst
+runSudokuT opts = (A.BS.empty @a,) >>> observeT >>>> flip runReaderT opts >>> runWriterT >>> fmap fst
 {-# INLINE runSudokuT #-}
 
 makeLenses ''BacktrackState

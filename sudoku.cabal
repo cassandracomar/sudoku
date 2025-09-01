@@ -80,6 +80,7 @@ library
     other-modules:    Data.BitSet
                     , Data.BitMap
                     , Data.Utils
+                    , Data.Word16Set
 
     -- LANGUAGE extensions used by modules in this package.
     default-extensions:   OverloadedLabels

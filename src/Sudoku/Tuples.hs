@@ -8,7 +8,7 @@ import Control.Lens
 import Control.Monad (guard)
 import Control.Monad.Fix (fix)
 import Control.Monad.Logic (observeAll, observeMany)
-import Data.BitSet (bsfolded)
+import Data.Word16Set (bsfolded)
 import Data.Containers.ListUtils (nubOrd)
 import Data.Foldable
 import Data.List (sort, sortBy)
@@ -37,7 +37,7 @@ import Sudoku.Summaries (
  )
 import TextShow (TextShow)
 
-import Data.BitSet qualified as A.BS
+import Data.Word16Set qualified as A.BS
 import Data.Map.Monoidal.Strict qualified as M
 import Data.Set qualified as S
 import Data.Vector qualified as V
@@ -84,7 +84,7 @@ digitPartitions = iconstantly $ ifolding (\(loc, cell) -> Just (loc, fold $ digi
 
 cellUpdateFromPartitions ::
     (Ord a, Enum a) =>
-    Lens' s [CommonPossibilities a] -> CellPos -> RegionSummaries s -> A.BS.BitSet Word16 a
+    Lens' s [CommonPossibilities a] -> CellPos -> RegionSummaries s -> A.BS.BitSet a
 cellUpdateFromPartitions sel pos summs =
     foldMapByOf
         (folded . sharedPossibilities)

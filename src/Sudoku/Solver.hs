@@ -9,7 +9,6 @@ import Data.Aeson (eitherDecodeStrict')
 import Data.Functor (($>))
 import Data.Maybe (fromMaybe)
 import Data.Utils ((>>>>))
-import Data.Word (Word16)
 import Sudoku.Backtracking (Contradicted, Sudoku, attemptToContradict, findRestrictedCells, runSudokuT)
 import Sudoku.Cell
 import Sudoku.Grid
@@ -17,7 +16,7 @@ import Sudoku.Simplifiers
 import Sudoku.Summaries (ValueConstraint, checkSolved, solved, summaryOf)
 import TextShow as TB (Builder, TextShow (showb, showbList), toLazyText, unlinesB)
 
-import Data.BitSet qualified as A.BS
+import Data.Word16Set qualified as A.BS
 import Data.ByteString qualified as BS
 import Data.Set qualified as S
 import Data.Vector.Unboxed qualified as VU
@@ -199,11 +198,11 @@ runBacktrackingSolver mg = do
     go :: (ValueConstraint a) => [CellPos] -> Grid a -> Sudoku a (Grid a)
     go (loc : locs) g = do
         printNoticeStart loc
-        put (A.BS.empty @Word16, g) >> attemptToContradict runCheapSimplifiers loc <|> return ()
+        put (A.BS.empty, g) >> attemptToContradict runCheapSimplifiers loc <|> return ()
         cs <- use _1
         printNoticeEnd loc cs
         let g' = applyUpdates loc cs g
-        g'' <- put (A.BS.empty @Word16, g') >> runBasicSolver g'
+        g'' <- put (A.BS.empty, g') >> runBasicSolver g'
         ensure solverCheckGridSolved g'' <|> go locs g''
     go [] g = return g
 {-# SPECIALIZE runBacktrackingSolver :: Sudoku Digit (Grid Digit) -> Sudoku Digit (Grid Digit) #-}

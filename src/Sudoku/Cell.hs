@@ -14,7 +14,6 @@ import Control.DeepSeq (NFData)
 import Control.Lens
 import Data.Aeson (FromJSON, ToJSON (toEncoding))
 import Data.Aeson.Types (FromJSON (parseJSON), ToJSON (toJSON))
-import Data.Bits (Bits ((.|.)), testBit, (!<<.), (!>>.))
 import Data.Foldable (fold)
 import Data.Hashable (Hashable)
 import Data.List (intersperse)
@@ -29,12 +28,14 @@ import Numeric.QuoteQuot (quoteQuot, quoteRem)
 import TextShow (Builder, TextShow (..), toString)
 import TextShow.Data.Char (showbLitChar)
 
-import Data.BitSet qualified as A.BS
+import Data.Word16Set qualified as A.BS
 import Data.Vector.Generic qualified as VG
 import Data.Vector.Generic.Mutable qualified as VG
 import Data.Vector.Primitive qualified as VP
 import Data.Vector.Unboxed qualified as VU
 import Data.Vector.Unboxed.Mutable qualified as MVU
+import GHC.Exts (DataToTag(dataToTag#), tagToEnum#, int2Word#, wordToWord16#, word2Int#, word16ToWord#)
+import qualified GHC.Exts as Exts
 
 data Digit = One | Two | Three | Four | Five | Six | Seven | Eight | Nine
     deriving (Ord, Eq, Generic)
@@ -51,54 +52,18 @@ instance Bounded Digit where
 
 -- | rather than convert back and forth through `Int`, just look up the enum values
 digitToWord16 :: Digit -> Word16
-digitToWord16 = \case
-    One -> W16# 0#Word16
-    Two -> W16# 1#Word16
-    Three -> W16# 2#Word16
-    Four -> W16# 3#Word16
-    Five -> W16# 4#Word16
-    Six -> W16# 5#Word16
-    Seven -> W16# 6#Word16
-    Eight -> W16# 7#Word16
-    Nine -> W16# 8#Word16
+digitToWord16 d = W16# (wordToWord16# (int2Word# (dataToTag# d)))
 
 -- | as for `digitToWord16`, lookup the digit for an enum value directly
 word16ToDigit :: Word16 -> Digit
-word16ToDigit = \case
-    W16# 0#Word16 -> One
-    W16# 1#Word16 -> Two
-    W16# 2#Word16 -> Three
-    W16# 3#Word16 -> Four
-    W16# 4#Word16 -> Five
-    W16# 5#Word16 -> Six
-    W16# 6#Word16 -> Seven
-    W16# 7#Word16 -> Eight
-    W16# 8#Word16 -> Nine
+word16ToDigit (W16# w) = tagToEnum# (word2Int# (word16ToWord# w))
 
 -- | as for `digitToWord16`, lookup the digit for an enum value directly
 intToDigit :: Int -> Digit
-intToDigit = \case
-    0 -> One
-    1 -> Two
-    2 -> Three
-    3 -> Four
-    4 -> Five
-    5 -> Six
-    6 -> Seven
-    7 -> Eight
-    8 -> Nine
+intToDigit (Exts.I# i) = tagToEnum# i
 
 digitToInt :: Digit -> Int
-digitToInt = \case
-    One -> 0
-    Two -> 1
-    Three -> 2
-    Four -> 3
-    Five -> 4
-    Six -> 5
-    Seven -> 6
-    Eight -> 7
-    Nine -> 8
+digitToInt d = Exts.I# (dataToTag# d)
 
 instance VP.Prim Digit where
     sizeOfType# _ = sizeOfType# (Proxy @Word16)
@@ -142,9 +107,9 @@ instance Show Digit where
 
 type role CellSet phantom
 
-newtype CellSet a = CellSet {_bitSet :: A.BS.BitSet Word16 a}
+newtype CellSet a = CellSet {_bitSet :: A.BS.BitSet a}
     deriving (Generic)
-    deriving (Semigroup, Monoid) via A.BS.BitSet Word16 a
+    deriving (Semigroup, Monoid) via A.BS.BitSet a
     deriving (Ord, Eq, VP.Prim) via Word16
 
 instance (NFData a) => NFData (CellSet a)
@@ -191,21 +156,21 @@ pattern Known d <- KnownRepr (Just . fromURepr -> Just d)
 instance (NFData a) => NFData (Cell a)
 
 isKnown :: forall a. Cell a -> Bool
-isKnown c =
-    let w = cellToWord16 c
-    in testBit w 0
+isKnown (KnownRepr _) = True
+isKnown _ = False
+
 
 isPossibly :: forall a. Cell a -> Bool
 isPossibly = not . isKnown
 
 cellToWord16 :: Cell a -> Word16
-cellToWord16 (KnownRepr w) = (w !<<. 1) .|. 0b1
-cellToWord16 (Possibly (CellSet (A.BS.BitSet w))) = w !<<. 1
+cellToWord16 (KnownRepr (W16# w)) = W16# ((w `Exts.uncheckedShiftLWord16#` 1#) `Exts.orWord16#` 1#Word16)
+cellToWord16 (Possibly (CellSet (A.BS.BitSet (W16# w)))) = W16# (w `Exts.uncheckedShiftLWord16#` 1#)
 
 word16ToCell :: Word16 -> Cell a
-word16ToCell w
-    | testBit w 0 = KnownRepr (w !>>. 1)
-    | otherwise = Possibly (CellSet (A.BS.BitSet (w !>>. 1)))
+word16ToCell (W16# w) = case Exts.andWord16# w 1#Word16 of
+  1#Word16 -> KnownRepr (W16# (w `Exts.uncheckedShiftRLWord16#` 1#))
+  _  -> Possibly (CellSet (A.BS.BitSet (W16# (w `Exts.uncheckedShiftRLWord16#` 1#))))
 
 instance VP.Prim (Cell a) where
     sizeOfType# _ = sizeOfType# (Proxy @Word16)
