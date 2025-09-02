@@ -14,7 +14,7 @@ import Control.Lens
 import Control.Lens.Extras (is)
 import Control.Monad (forM_, guard)
 import Control.Monad.ST (ST, runST)
-import Data.Word16Set (bsfolded, bsifolded)
+import Data.Word16Set (bsfolded, bsindices)
 import Data.Containers.ListUtils (nubOrd)
 import Data.Default (Default (def))
 import Data.Functor (($>))
@@ -627,7 +627,7 @@ possibilitiesWithLoc ::
 possibilitiesWithLoc = ifolding (\(loc, cell) -> Identity (loc, posses loc cell))
   where
     ins loc ri r a = M.insert a (ortho ri loc) r
-    posses loc cell ri = const $ foldlOf' (_Possibly . _CellSet . bsifolded) (ins loc ri) mempty cell
+    posses loc cell ri = const $ foldlOf' (_Possibly . _CellSet . bsindices) (ins loc ri) mempty cell
 {-# INLINE possibilitiesWithLoc #-}
 
 contradictions ::

@@ -224,6 +224,15 @@ first (BitSet (W16# bits)) =
     in if count <= fromEnum (maxBound @a) then Just (toEnum count) else Nothing
 {-# INLINE first #-}
 
+last :: forall a. (Enum a, Bounded a) => BitSet a -> Maybe a
+last (BitSet (W16# bits)) =
+    let
+        leading = Exts.I# (Exts.word2Int# (Exts.clz16# (Exts.word16ToWord# bits)))
+        !count = 16 - leading
+    in
+        if count >= fromEnum (minBound @a) && count <= fromEnum (maxBound @a) then Just (toEnum count) else Nothing
+{-# INLINE last #-}
+
 -- | Convert this bit set set to a list of elements.
 {-# INLINE [0] toList #-}
 toList :: (Enum a) => BitSet a -> [a]
@@ -250,11 +259,11 @@ bsfolded ::
 bsfolded = ifoldring ifoldr
 {-# INLINE bsfolded #-}
 
-bsifolded ::
+bsindices ::
     (Enum a, Enum a', Contravariant f, Applicative f) =>
     IndexedLensLike Int f (BitSet a) (BitSet a') Int b
-bsifolded = ifoldring (\f -> foldrIndex (\i b -> f i i b))
-{-# INLINE bsifolded #-}
+bsindices = ifoldring (\f -> foldrIndex (\i b -> f i i b))
+{-# INLINE bsindices #-}
 
 bitSetOf :: (Enum a) => Fold s a -> s -> BitSet a
 bitSetOf f = foldlOf' f (flip insert) empty
