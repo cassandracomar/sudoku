@@ -14,7 +14,7 @@ import Control.Lens
 import Control.Lens.Extras (is)
 import Control.Monad (forM_, guard)
 import Control.Monad.ST (ST, runST)
-import Data.Word16Set (bsfolded)
+import Data.Word16Set (bsfolded, bsifolded)
 import Data.Containers.ListUtils (nubOrd)
 import Data.Default (Default (def))
 import Data.Functor (($>))
@@ -373,9 +373,9 @@ cellSetList = iso (CellSet . A.BS.fromList) (A.BS.toList . _bitSet)
 -- | creates an update set by concatenating `CellSummaries` for a given cell position
 updateSet :: (Monoid b) => RegionSummaries b -> CellPos -> b
 updateSet summs (r, c, b) =
-    summs ^. ix Row . ix r
-        <> summs ^. ix Column . ix c
-        <> summs ^. ix Box . ix b
+    (summs ^. ix Row . byRegion) V.! (fromIntegral r - 1)
+        <> (summs ^. ix Column . byRegion) V.! (fromIntegral c - 1)
+        <> (summs ^. ix Box . byRegion) V.! (fromIntegral b - 1)
 {-# INLINE updateSet #-}
 
 cellUpdating :: (CellPos -> RegionSummaries b -> Maybe a) -> IndexedFold CellPos (RegionSummaries b) a
@@ -627,7 +627,7 @@ possibilitiesWithLoc ::
 possibilitiesWithLoc = ifolding (\(loc, cell) -> Identity (loc, posses loc cell))
   where
     ins loc ri r a = M.insert a (ortho ri loc) r
-    posses loc cell ri = const $ foldlOf' (_Possibly . _CellSet . bsfolded . from enumerated) (ins loc ri) mempty cell
+    posses loc cell ri = const $ foldlOf' (_Possibly . _CellSet . bsifolded) (ins loc ri) mempty cell
 {-# INLINE possibilitiesWithLoc #-}
 
 contradictions ::

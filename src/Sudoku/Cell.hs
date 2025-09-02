@@ -129,9 +129,9 @@ instance (Enum a, TextShow a) => TextShow (CellSet a) where
         if A.BS.size ps < 5
             then
                 "("
-                    <> ( fold (replicate (4 - A.BS.size ps + 1) (showbLitChar ' '))
+                    <> ( fold (replicate (fromIntegral (4 - A.BS.size ps + 1)) (showbLitChar ' '))
                             <> ( fold (intersperse (showbLitChar ' ') (map showb $ A.BS.toList ps))
-                                    <> ( fold (replicate (4 - A.BS.size ps + 1) (showbLitChar ' '))
+                                    <> ( fold (replicate (fromIntegral (4 - A.BS.size ps + 1)) (showbLitChar ' '))
                                             <> ")"
                                        )
                                )
