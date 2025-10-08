@@ -1,6 +1,6 @@
 {
   inputs = {
-    nixpkgs.url = "github:nixos/nixpkgs/haskell-updates";
+    nixpkgs.url = "github:nixos/nixpkgs";
     flake-parts.url = "github:hercules-ci/flake-parts";
     haskell-flake.url = "github:srid/haskell-flake";
     # llvm-hs.url = "github:cassandracomar/llvm-hs/llvm-16";
@@ -41,68 +41,69 @@
         #     hash = "sha256-LZ10czBn5oaKMHQ8xguC6VZa7wvEgPRu6oWt/22QaDs=";
         #   };
         # });
-        libcxxStdenv =
-          pkgs.overrideCC (
-            pkgs.llvmPackages.libcxxStdenv.override (old: {
-              hostPlatform =
-                (old.hostPlatform or {})
-                // {
-                  useLLVM = true;
-                  linker = "lld";
-                };
-              buildPlatform =
-                (old.buildPlatform or {})
-                // {
-                  useLLVM = true;
-                  linker = "lld";
-                };
-              targetPlatform =
-                (old.targetPlatform or {})
-                // {
-                  useLLVM = true;
-                  linker = "lld";
-                };
-            })
-          )
-          (pkgs.llvmPackages.clangUseLLVM.override {
-            inherit (pkgs.llvmPackages) bintools;
-          });
-        # targetPackages = {
-        #   stdenv = libcxxStdenv;
+        # libcxxStdenv =
+        #   pkgs.overrideCC (
+        #     pkgs.llvmPackages.libcxxStdenv.override (old: {
+        #       hostPlatform =
+        #         (old.hostPlatform or {})
+        #         // {
+        #           useLLVM = true;
+        #           linker = "lld";
+        #         };
+        #       buildPlatform =
+        #         (old.buildPlatform or {})
+        #         // {
+        #           useLLVM = true;
+        #           linker = "lld";
+        #         };
+        #       targetPlatform =
+        #         (old.targetPlatform or {})
+        #         // {
+        #           useLLVM = true;
+        #           linker = "lld";
+        #         };
+        #     })
+        #   )
+        #   (pkgs.llvmPackages.clangUseLLVM.override {
+        #     inherit (pkgs.llvmPackages) bintools;
+        #   });
+        # # targetPackages = {
+        # #   stdenv = libcxxStdenv;
+        # # };
+        # ghc = (pkgs.haskell.compiler.ghc9122.override ({
+        #     useLLVM = true;
+        #   }
+        #   // pkgs.lib.optionalAttrs pkgs.stdenv.isLinux {
+        #     # inherit targetPackages;
+        #     stdenv = pkgs.llvmPackages.libcxxStdenv;
+        #     # pkgsHostTarget =
+        #     #   pkgs.pkgsHostTarget
+        #     #   // {
+        #     #     inherit targetPackages;
+        #     #   };
+        #   })).overrideAttrs (old:
+        #   pkgs.lib.optionalAttrs pkgs.stdenv.isLinux {
+        #     # preConfigure =
+        #     #   (old.preConfigure or "")
+        #     #   + ''
+        #     #     export CLANG=${libcxxStdenv.cc}/bin/clang
+        #     #   '';
+        #     hardeningDisable = (old.hardeningDisable or []) ++ ["fortify"];
+        #     hadrianFlags = (old.hadrianFlags or []) ++ ["-j"];
+        #   });
+        # haskellPackages = pkgs.callPackage "${inputs.nixpkgs}/pkgs/development/haskell-modules" {
+        #   inherit ghc;
+        #   haskellLib = pkgs.haskell.lib.compose;
+        #   buildHaskellPackages = haskellPackages;
+        #   stdenv =
+        #     if pkgs.stdenv.isLinux
+        #     then pkgs.llvmPackages.libcxxStdenv
+        #     else pkgs.stdenv;
+        #   compilerConfig = pkgs.callPackage "${inputs.nixpkgs}/pkgs/development/haskell-modules/configuration-ghc-9.12.x.nix" {
+        #     haskellLib = pkgs.haskell.lib.compose;
+        #   };
         # };
-        ghc = (pkgs.haskell.compiler.ghc9122.override ({
-            useLLVM = true;
-          }
-          // pkgs.lib.optionalAttrs pkgs.stdenv.isLinux {
-            # inherit targetPackages;
-            stdenv = pkgs.llvmPackages.libcxxStdenv;
-            # pkgsHostTarget =
-            #   pkgs.pkgsHostTarget
-            #   // {
-            #     inherit targetPackages;
-            #   };
-          })).overrideAttrs (old:
-          pkgs.lib.optionalAttrs pkgs.stdenv.isLinux {
-            # preConfigure =
-            #   (old.preConfigure or "")
-            #   + ''
-            #     export CLANG=${libcxxStdenv.cc}/bin/clang
-            #   '';
-            hardeningDisable = (old.hardeningDisable or []) ++ ["fortify"];
-            hadrianFlags = (old.hadrianFlags or []) ++ ["-j"];
-          });
-        haskellPackages = pkgs.callPackage "${inputs.nixpkgs}/pkgs/development/haskell-modules" {
-          inherit ghc;
-          haskellLib = pkgs.haskell.lib.compose;
-          buildHaskellPackages = haskellPackages;
-          stdenv =
-            if pkgs.stdenv.isLinux
-            then pkgs.llvmPackages.libcxxStdenv
-            else pkgs.stdenv;
-          compilerConfig = pkgs.callPackage "${inputs.nixpkgs}/pkgs/development/haskell-modules/configuration-ghc-9.12.x.nix" {
-            haskellLib = pkgs.haskell.lib.compose;
-          };
-        };
+        ghc = pkgs.haskell.compiler.ghc9122;
         autofdo = pkgs.stdenv.mkDerivation {
           name = "autofdo";
           version = "0.30.1";
@@ -172,10 +173,11 @@
           devShell.enable = false; # Disable devShells
           autoWire = []; # Don't wire any flake outputs
 
-          basePackages = haskellPackages.extend (final: prev: {
+          basePackages = pkgs.haskell.packages.ghc9122.extend (final: prev: {
             Cabal = prev.Cabal_3_14_2_0;
             Cabal-syntax = prev.Cabal-syntax_3_14_2_0;
             stylish-haskell = prev.stylish-haskell_0_15_0_1;
+            th-desugar = prev.th-desugar_1_18;
           });
 
           packages = let
@@ -183,8 +185,8 @@
               src = pkgs.fetchFromGitHub {
                 owner = "haskell";
                 repo = "haskell-language-server";
-                rev = "e3d38b0c4666681dca39901aa9d47b04422c82ff";
-                sha256 = "sha256-FMCBKSS0pqKtPXqPrM95Gn9Mj7F9uPq4hLMMIXSlqaw=";
+                rev = "76b5fbc5fdd551c729959e9434e895d388e23ad6";
+                sha256 = "sha256-KdEHSAn8NRK1tiDvgoUm8ZObz91WuNz7/OJj9qsZfhs=";
               };
               patches = [
                 ./inlay-hints-local-binding.patch
@@ -227,11 +229,18 @@
             #   mkdir -p $out
             #   cp -rL ${accelerate-io}/accelerate-io-vector/ $out
             # '';
+            singletons-src = pkgs.fetchFromGitHub {
+              owner = "goldfirere";
+              repo = "singletons";
+              rev = "singletons-th-base-3.5";
+              sha256 = "sha256-A24i/wzVTr7WmnNXJUdo2EPIOc2xm7WWLpARzkZdvj0=";
+            };
           in {
-            singletons.source = "3.0.4";
-            singletons-th.source = "3.5";
-            singletons-base.source = "3.5";
-            th-desugar.source = "1.18";
+            singletons.source = "${singletons-src}/singletons";
+            singletons-th.source = "${singletons-src}/singletons-th";
+            singletons-base.source = "${singletons-src}/singletons-base";
+            singletons-base-code-generator.source = "${singletons-src}/singletons-base-code-generator";
+            # th-desugar.source = "1.18";
             cabal-fmt.source = pkgs.fetchFromGitHub {
               owner = "phadej";
               repo = "cabal-fmt";
@@ -284,10 +293,16 @@
             #   sha256 = "sha256-grGuPu1F+Xl2OiYQOfZp7BQR9Kv/vvh+xpnfZdFkhpE=";
             # };
             stylish-haskell.source = "0.15.1.0";
+            unordered-containers.source = pkgs.fetchFromGitHub {
+              owner = "haskell-unordered-containers";
+              repo = "unordered-containers";
+              rev = "213c64a1d2b7f75a5b2ae42576b77fc544b1160e";
+              sha256 = "sha256-wNBESnp/yyMEqOii8rckB6n6XWq4Wpke2ncoHmOKbyw=";
+            };
           };
 
           settings = {
-            singletons-base-code-generator.broken = false;
+            # singletons-base-code-generator.broken = false;
             cabal-fmt.jailbreak = true;
             cabal-install-parsers.jailbreak = true;
             statistics.jailbreak = true;
@@ -454,12 +469,12 @@
                 cabal-gild
                 cabal-fmt
                 haskell-language-server
-              ;
+                ;
               # inherit (pkgs.llvmPackages) bintools libllvm llvm clangUseLLVM;
               # inherit (pkgs.llvmPackages.libllvm) lib dev;
               inherit (pkgs.stdenv) cc;
               inherit (pkgs.stdenv.cc) bintools;
-              inherit autofdo;
+              # inherit autofdo;
               graphviz = inputs.nixpkgs.legacyPackages.${system}.graphviz;
             };
             mkShellArgs = {
@@ -475,7 +490,7 @@
         # packages.llvm-hs = config.haskellProjects.ghc912.outputs.finalPackages.llvm-hs;
         packages.stdenv = pkgs.stdenv;
         packages.llvm = pkgs.llvmPackages.llvm;
-        packages.libcxxStdenv = libcxxStdenv;
+        # packages.libcxxStdenv = libcxxStdenv;
         packages.autofdo = autofdo;
 
         packages.default = self'.packages.sudoku;

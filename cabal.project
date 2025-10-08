@@ -13,20 +13,28 @@ semaphore: True
 split-sections: True
 shared: True
 executable-dynamic: True
+constraints: QuickCheck < 2.17
+source-repository-package
+    type: git
+    location: https://github.com/haskell-unordered-containers/unordered-containers
+    tag: 213c64a1d2b7f75a5b2ae42576b77fc544b1160e
+package hashable
+        flags: +arch-native
 program-options
     ghc-options:
                  -- LLVM options
                  -- -fllvm
-                 -- -mavx
-                 -- -mavx2
-                 -- -mbmi
-                 -- -mbmi2
-                 -- -msse
-                 -- -msse2
-                 -- -msse3
-                 -- -msse4
-                 -- -msse4.2
-                 -- -mavx512cd
+                 -mavx
+                 -mavx2
+                 -mbmi
+                 -mbmi2
+                 -msse
+                 -msse2
+                 -msse3
+                 -msse4
+                 -msse4.2
+                 -mavx512cd
+                 -fproc-alignment=64
                  -- -mavx512f
                  -- -pgmlas=clang
                  -- -pgmc=clang
@@ -166,12 +174,14 @@ program-options
                  -funfolding-use-threshold=1600
                  -funfolding-dict-discount=1600
                  -fmax-worker-args=20
+                 -fstrictness-before=48
                  -- results in a mild speedup, ~5%
                  -fworker-wrapper-cbv
                  -- -ddump-rules
                  -- -ddump-rule-firings
                  -- -ddump-rule-rewrites
                  -ddump-simpl
+                 -ddump-asm
                  -ddump-to-file
                  -dno-typeable-binds
                  -dsuppress-coercions

@@ -10,11 +10,11 @@ a single cell's summary to the summaries for each of its `Row`/`Column`/`Box`.
 module Sudoku.Summaries where
 
 import Control.Applicative ((<**>))
+import Control.DeepSeq (NFData)
 import Control.Lens
 import Control.Lens.Extras (is)
-import Control.Monad (forM_, guard)
+import Control.Monad (forM_)
 import Control.Monad.ST (ST, runST)
-import Data.Word16Set (bsfolded, bsindices)
 import Data.Containers.ListUtils (nubOrd)
 import Data.Default (Default (def))
 import Data.Functor (($>))
@@ -25,6 +25,7 @@ import Data.Utils ((>>>>))
 import Data.Vector.Generic.Lens (vectorIx)
 import Data.Vector.Unboxed (IsoUnbox)
 import Data.Word (Word16, Word8)
+import Data.Word16Set (bsfolded, bsindices)
 import GHC.Base (inline)
 import GHC.Generics (Generic)
 import GHC.TypeLits (Nat, natVal)
@@ -47,18 +48,19 @@ import Sudoku.Grid (
 import TextShow (TextShow (showb), toString)
 import TextShow.Data.List (showbListWith)
 
-import Data.Word16Set qualified as A.BS
 import Data.Foldable qualified as F
+import Data.HashMap.Strict qualified as HM
 import Data.HashSet qualified as HS
-import Data.IntMap qualified as MS
 import Data.IntMap.Internal qualified as MM
-import Data.IntMap.Monoidal qualified as M
+import Data.IntMap.Monoidal.Strict qualified as M
+import Data.IntMap.Strict qualified as MS
 import Data.Vector qualified as V
 import Data.Vector.Generic qualified as VG
 import Data.Vector.Generic.Mutable qualified as MVG
 import Data.Vector.Primitive qualified as VP
 import Data.Vector.Unboxed qualified as VU
 import Data.Vector.Unboxed.Base qualified as MVU
+import Data.Word16Set qualified as A.BS
 
 -- | `A.BS.BitSet` with all digits marked
 completeDigitSet :: A.BS.BitSet a
@@ -310,10 +312,10 @@ instance Ixed (RegionSummaries a) where
     ix Box = boxes
     {-# INLINE ix #-}
 
-{- | assuming the monoid instance for `a` is associative, this function provides an `ifoldl'` function that can be used over an entire
+{- | assuming the monoid instance for `m` is associative, this function provides an `ifoldl'` function that can be used over an entire
 grid to calculate a summary of the grid, organized by region. rather than using the inefficient `Monoid` instance on `CellSummaries`,
 it instead updates each region the cell belongs to by indexing `CellSummaries` to get the current summary of each region type and
-updates it by `mappend`ing `a` on the right. this relies on the associativity of the `Monoid` instance for `a`. a non-law abiding
+updates it by `mappend`ing `m` on the right. this relies on the associativity of the `Monoid` instance for `m`. a non-law abiding
 `Monoid` instance won't produce the expected results.
 -}
 addToSummary ::
@@ -340,10 +342,10 @@ summaryOfM l s = (,,) <$> initialize <*> initialize <*> initialize >>= flip (ifo
         MVG.set v mempty $> v
 {-# INLINE summaryOfM #-}
 
-{- | produce a summary for an entire grid. takes the `Grid` vector and a function that maps each `Cell` to a Monoidal summary type `a`, carrying an index that
-provides the necessary information about the `Cell`'s row/column/box. the summary type chosen determines the information available at the end of the fold.
+{- | produce a summary for an entire grid. takes the `Grid` vector and a function that maps each `Cell` to a Monoidal summary type `m`, carrying an index that
+provides the necessary information about the `Cell`'s `Row`\/`Column`\/`Box`. the summary type chosen determines the information available at the end of the fold.
 for example, mapping each `Cell` to a singleton `CellSet` of `Known` digits wrapped in a `Union` newtype will produce the set of already known digits
-in each row/column/box.
+in each `Row`\/`Column`\/`Box`.
 -}
 summaryOf :: (Monoid m) => IndexedFold CellPos s (RegionIndicator -> Word8 -> m) -> s -> RegionSummaries m
 summaryOf l s = runST (summaryOfM l s >>= frzAll <&> mk)
@@ -659,7 +661,7 @@ type Solved a = Union (CellSet a)
 type Summary m a = (RegionSummaries (Contradictions a), RegionSummaries (Solved a), RegionSummaries m)
 
 type ValueConstraint a =
-    (VU.Unbox a, VU.IsoUnbox a Word16, VU.Unbox a, Enum a, Bounded a, Ord a, TextShow a, Hashable a)
+    (VU.Unbox a, VU.IsoUnbox a Word16, VU.Unbox a, Enum a, Bounded a, Ord a, TextShow a, Hashable a, NFData a)
 
 -- | unzip 3 mutable vectors of the same length via a single loop.
 munzip33 ::
@@ -709,6 +711,8 @@ data ContradictionDesc i a
     | NoFillForCell !CellPos
     deriving (Eq, Ord, Generic)
 
+instance (NFData i, NFData a) => NFData (ContradictionDesc i a)
+
 instance (Hashable i, Hashable a) => Hashable (ContradictionDesc i a)
 
 instance (TextShow a, TextShow i, Num i) => TextShow (ContradictionDesc i a) where
@@ -721,39 +725,49 @@ instance (TextShow a, TextShow i, Num i) => Show (ContradictionDesc i a) where
     show = toString . showb
 
 findDigitRepeatsOn ::
-    (TextShow a, Ord a, Hashable a, Enum a) =>
-    RegionIndicator -> Int -> Int -> Sum Int -> HS.HashSet (ContradictionDesc Int a)
-findDigitRepeatsOn !ri !l !d !known
-    | known > 1 = HS.singleton $! DigitRepeats (toEnum d) ri l
-    | otherwise = mempty
+    (Ord a, Hashable a, Enum a) =>
+    RegionIndicator -> Int -> Int -> Sum Int -> Maybe (ContradictionDesc Int a)
+findDigitRepeatsOn !ri !l ~d !known
+    | known > 1 = Just $! DigitRepeats (toEnum d) ri l
+    | otherwise = Nothing
 
 digitsForcedIntoCells ::
     forall a.
-    (TextShow a, Ord a, Hashable a, Enum a) =>
-    RegionIndicator
+    (Ord a, Hashable a, Enum a) =>
+    HS.HashSet (ContradictionDesc Int a)
+    -> RegionIndicator
     -> Int
     -> M.MonoidalIntMap (Union (CellSet Word8))
     -> M.MonoidalIntMap (Sum Int)
     -> HS.HashSet (ContradictionDesc Int a)
-digitsForcedIntoCells !ri !i !poss !known =
-    HS.fromList $! do
-        (d, loc) <- singleLoc
-        (d', loc') <- singleLoc
-        guard (d < d' && loc == loc') $> SharedCell d d' loc
+digitsForcedIntoCells !res !ri !i !poss !known = ifoldl' describe res singletonsByLoc
   where
     sel = itraversed <. _Union . _CellSet
     whenSingleton d ps = A.BS.size ps == 1 && M.lookup d known < Just 1
-    singletonLocs =
+    singletonSel =
         sel . ifiltered whenSingleton <. bsfolded . from enumerated . to (ri,i,) . from _majorMinor . _2
-    !singleLoc = poss ^@.. reindexed toEnum singletonLocs
+    {-# INLINE singletonSel #-}
+    mergeSingletons d r loc = HM.insert loc (d : concat (HM.lookup loc r)) r
+    !singletonsByLoc = ifoldlOf' (reindexed toEnum singletonSel) mergeSingletons HM.empty poss
+    describe loc r = \case
+        d : d' : _ -> HS.insert (SharedCell d d' loc) r
+        _ -> r
+{-# SPECIALIZE digitsForcedIntoCells ::
+    HS.HashSet (ContradictionDesc Int Digit)
+    -> RegionIndicator
+    -> Int
+    -> M.MonoidalIntMap (Union (CellSet Word8))
+    -> M.MonoidalIntMap (Sum Int)
+    -> HS.HashSet (ContradictionDesc Int Digit)
+    #-}
 
 digitContradicted ::
-    (TextShow a, Ord a, Enum a) =>
+    (Ord a, Enum a) =>
     M.MonoidalIntMap (Union (CellSet Word8))
     -> M.MonoidalIntMap (Sum Int)
     -> a
     -> Bool
-digitContradicted !poss !known !d
+digitContradicted !poss !known ~d
     -- if the digit isn't known anywhere in the region
     | M.lookup (fromEnum d) known < Just 1 =
         -- and it's not possible anywhere in the region, then it's been contradicted
@@ -761,43 +775,48 @@ digitContradicted !poss !known !d
     | otherwise = False
 
 findDigitContradiction ::
-    (TextShow a, Ord a, Hashable a, Enum a) =>
+    (Ord a, Hashable a, Enum a) =>
     RegionIndicator
     -> Int
     -> M.MonoidalIntMap (Union (CellSet Word8))
     -> M.MonoidalIntMap (Sum Int)
     -> a
-    -> HS.HashSet (ContradictionDesc Int a)
-findDigitContradiction !ri !l !poss !known !d
-    | digitContradicted poss known d = HS.singleton $! CannotPlace d ri l
-    | otherwise = mempty
+    -> Maybe (ContradictionDesc Int a)
+findDigitContradiction !ri !l !poss !known ~d
+    | digitContradicted poss known d = Just $! CannotPlace d ri l
+    | otherwise = Nothing
 
 regionalContradictionsTest ::
-    (TextShow a, Ord a, Enum a, Bounded a, Hashable a) =>
+    forall a.
+    (Ord a, Enum a, Bounded a, Hashable a) =>
     RegionIndicator
     -> HS.HashSet (ContradictionDesc Int a)
     -> Int
     -> Contradictions a
     -> HS.HashSet (ContradictionDesc Int a)
-regionalContradictionsTest !ri !res !l (Contradictions !empt !poss !known) = res <> sharedCell <> cellContras <> repeatedDigits <> digitContradictions
+regionalContradictionsTest !ri !res !l (Contradictions !empt !poss !known) = digitContradictions
   where
     sel = _Union . _CellSet . bsfolded . from enumerated . to (ri,l,) . from _majorMinor . _2
-    !sharedCell = digitsForcedIntoCells ri l poss known
-    !cellContras = foldMapOf sel (HS.singleton . NoFillForCell) empt
-    !repeatedDigits = ifoldMap' (findDigitRepeatsOn ri l) known
-    !digitContradictions = F.foldMap' (findDigitContradiction ri l poss known) [minBound .. maxBound]
-{-# INLINE regionalContradictionsTest #-}
+    maybeIns = flip $ maybe <*> flip HS.insert
+    !sharedCell = digitsForcedIntoCells res ri l poss known
+    !cellContras = foldlOf' sel (flip (HS.insert . NoFillForCell)) sharedCell empt
+    !repeatedDigits = ifoldl' (\i -> flip $ maybeIns . findDigitRepeatsOn ri l i) cellContras known
+    !digitContradictions = F.foldl' (flip $ maybeIns . findDigitContradiction ri l poss known) repeatedDigits [minBound .. maxBound]
+{-# SPECIALIZE regionalContradictionsTest ::
+    RegionIndicator
+    -> HS.HashSet (ContradictionDesc Int Digit)
+    -> Int
+    -> Contradictions Digit
+    -> HS.HashSet (ContradictionDesc Int Digit)
+    #-}
 
 testForContradictions ::
-    (TextShow a, Ord a, Enum a, Bounded a, Hashable a) =>
+    (TextShow a, Ord a, Enum a, Bounded a, Hashable a, NFData a) =>
     RegionSummaries (Contradictions a) -> HS.HashSet (ContradictionDesc Int a)
 testForContradictions !summs = testAcross Row <> testAcross Column <> testAcross Box
   where
-    testAcross !ri =
-        V.ifoldl' (regionalContradictionsTest ri) mempty (summs ^. ix ri . byRegion)
-{-# SPECIALIZE testForContradictions ::
-    RegionSummaries (Contradictions Digit) -> HS.HashSet (ContradictionDesc Int Digit)
-    #-}
+    testAcross !ri = V.ifoldl' (regionalContradictionsTest ri) mempty (summs ^. ix ri . byRegion)
+{-# INLINE testForContradictions #-}
 
 {- | if the possible locations for a digit within a set are aligned on intersecting sets (i.e. 2 only has two locations within a box and they're in the same column),
 then remove that digit from other possible locations along the rest of the intersecting traversal.
@@ -830,8 +849,7 @@ digitLocationsAlignedOn ri i (LocationAlignment possibles) g = foldl' update g [
         | check Column d = locs d ^? _Just . _head . _2 . mkL Column
         | check Box d = locs d ^? _Just . _head . _3 . mkL Box
         | otherwise = Nothing
-    hasDisjointInds m = notNullOf (runIndexedTraversal m . asIndex) g
-    update g' d = case ensure hasDisjointInds =<< disjointInds d of
+    update g' d = case disjointInds d of
         Just m -> removePossibilitiesOfOn (runIndexedTraversal m) (folded . enumerated) [d] g'
         Nothing -> g'
 {-# INLINE digitLocationsAlignedOn #-}

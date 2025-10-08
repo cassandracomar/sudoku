@@ -22,20 +22,20 @@ import Data.Proxy (Proxy (..))
 import Data.Vector.Generic.Lens (vectorTraverse)
 import Data.Vector.Unboxed (IsoUnbox (..))
 import Data.Word (Word16, Word8)
+import GHC.Exts (DataToTag (dataToTag#), int2Word#, tagToEnum#, word16ToWord#, word2Int#, wordToWord16#)
 import GHC.Generics (Generic)
 import GHC.Word (Word16 (..))
 import Numeric.QuoteQuot (quoteQuot, quoteRem)
 import TextShow (Builder, TextShow (..), toString)
 import TextShow.Data.Char (showbLitChar)
 
-import Data.Word16Set qualified as A.BS
 import Data.Vector.Generic qualified as VG
 import Data.Vector.Generic.Mutable qualified as VG
 import Data.Vector.Primitive qualified as VP
 import Data.Vector.Unboxed qualified as VU
 import Data.Vector.Unboxed.Mutable qualified as MVU
-import GHC.Exts (DataToTag(dataToTag#), tagToEnum#, int2Word#, wordToWord16#, word2Int#, word16ToWord#)
-import qualified GHC.Exts as Exts
+import Data.Word16Set qualified as A.BS
+import GHC.Exts qualified as Exts
 
 data Digit = One | Two | Three | Four | Five | Six | Seven | Eight | Nine
     deriving (Ord, Eq, Generic)
@@ -159,18 +159,17 @@ isKnown :: forall a. Cell a -> Bool
 isKnown (KnownRepr _) = True
 isKnown _ = False
 
-
 isPossibly :: forall a. Cell a -> Bool
 isPossibly = not . isKnown
 
 cellToWord16 :: Cell a -> Word16
-cellToWord16 (KnownRepr (W16# w)) = W16# ((w `Exts.uncheckedShiftLWord16#` 1#) `Exts.orWord16#` 1#Word16)
-cellToWord16 (Possibly (CellSet (A.BS.BitSet (W16# w)))) = W16# (w `Exts.uncheckedShiftLWord16#` 1#)
+cellToWord16 (KnownRepr (W16# !w)) = W16# ((w `Exts.uncheckedShiftLWord16#` 1#) `Exts.orWord16#` 1#Word16)
+cellToWord16 (Possibly (CellSet (A.BS.BitSet (W16# !w)))) = W16# (w `Exts.uncheckedShiftLWord16#` 1#)
 
 word16ToCell :: Word16 -> Cell a
-word16ToCell (W16# w) = case Exts.andWord16# w 1#Word16 of
-  1#Word16 -> KnownRepr (W16# (w `Exts.uncheckedShiftRLWord16#` 1#))
-  _  -> Possibly (CellSet (A.BS.BitSet (W16# (w `Exts.uncheckedShiftRLWord16#` 1#))))
+word16ToCell (W16# !w) = case Exts.andWord16# w 1#Word16 of
+    1#Word16 -> KnownRepr (W16# (w `Exts.uncheckedShiftRLWord16#` 1#))
+    _ -> Possibly (CellSet (A.BS.BitSet (W16# (w `Exts.uncheckedShiftRLWord16#` 1#))))
 
 instance VP.Prim (Cell a) where
     sizeOfType# _ = sizeOfType# (Proxy @Word16)
@@ -233,11 +232,11 @@ cells = reindexed rowColumn vectorTraverse
 {-# INLINE cells #-}
 
 boxIndex :: CellPos -> Word8
-boxIndex (!r, !c, _) = rem3 (r - 1) * 3 + rem3 (c - 1) + 1
+boxIndex (!r, !c, _) = let !b = rem3 (r - 1) * 3 + rem3 (c - 1) + 1 in b
 {-# INLINE boxIndex #-}
 
 withBoxIndex :: Iso' CellPos (Word8, Word8, Word8, Word8)
-withBoxIndex = iso (\(r, c, b) -> (r, c, b, boxIndex (r, c, b))) (\(r, c, b, _) -> (r, c, b))
+withBoxIndex = iso (\(!r, !c, !b) -> (r, c, b, boxIndex (r, c, b))) (\(r, c, b, _) -> (r, c, b))
 {-# INLINE withBoxIndex #-}
 
 quot3 :: Word8 -> Word8
@@ -259,16 +258,19 @@ rem9 = $$(quoteRem 9)
 boxIndexing :: Iso' CellPos (Word8, Word8)
 boxIndexing =
     iso
-        (\loc@(_, _, b) -> (b, boxIndex loc))
-        ( \(b, offset) ->
-            ( quot3 (b - 1) * 3 + quot3 (offset - 1) + 1
-            , rem3 (b - 1) * 3 + rem3 (offset - 1) + 1
-            , b
-            )
+        (\loc@(_, _, !b) -> (b, boxIndex loc))
+        ( \(!b, !offset) ->
+            let
+                !r = quot3 (b - 1) * 3 + quot3 (offset - 1) + 1
+                !c = rem3 (b - 1) * 3 + rem3 (offset - 1) + 1
+            in
+                (r, c, b)
         )
 {-# INLINE boxIndexing #-}
 
 data RegionIndicator = Row | Column | Box deriving (Eq, Ord, Generic, Enum)
+
+instance NFData RegionIndicator
 
 instance Hashable RegionIndicator
 
@@ -281,15 +283,36 @@ instance Show RegionIndicator where
     show = toString . showb
 
 majorMinor :: RegionIndicator -> CellPos -> (RegionIndicator, Int, Int)
-majorMinor Row (!r, !c, _) = (Row, fromIntegral r, fromIntegral c)
-majorMinor Column (!r, !c, _) = (Column, fromIntegral c, fromIntegral r)
-majorMinor Box loc@(_, _, !b) = (Box, fromIntegral b, fromIntegral (boxIndex loc))
+majorMinor Row (!r, !c, _) = (Row, rInt, cInt)
+  where
+    !rInt = fromIntegral r
+    !cInt = fromIntegral c
+majorMinor Column (!r, !c, _) = (Column, cInt, rInt)
+  where
+    !rInt = fromIntegral r
+    !cInt = fromIntegral c
+majorMinor Box loc@(_, _, !b) = (Box, bInt, bIdxInt)
+  where
+    !bInt = fromIntegral b
+    !bIdxInt = fromIntegral (boxIndex loc)
 {-# INLINE majorMinor #-}
 
 fromMajorMinor :: (RegionIndicator, Int, Int) -> (RegionIndicator, CellPos)
-fromMajorMinor (Row, !row, !col) = (Row, (fromIntegral row, fromIntegral col, boxNumber (fromIntegral row) (fromIntegral col)))
-fromMajorMinor (Column, !col, !row) = (Column, (fromIntegral row, fromIntegral col, boxNumber (fromIntegral row) (fromIntegral col)))
-fromMajorMinor (Box, !box, !boxIdx) = (Box, (fromIntegral box, fromIntegral boxIdx) ^. re boxIndexing)
+fromMajorMinor (Row, !row, !col) = (Row, (rInt, cInt, bInt))
+  where
+    !rInt = fromIntegral row
+    !cInt = fromIntegral col
+    !bInt = boxNumber rInt cInt
+fromMajorMinor (Column, !col, !row) = (Column, (rInt, cInt, bInt))
+  where
+    !rInt = fromIntegral row
+    !cInt = fromIntegral col
+    !bInt = boxNumber rInt cInt
+fromMajorMinor (Box, !box, !boxIdx) = (Box, loc)
+  where
+    !bInt = fromIntegral box
+    !bIdxInt = fromIntegral boxIdx
+    !loc = (bInt, bIdxInt) ^. re boxIndexing
 {-# INLINE fromMajorMinor #-}
 
 _majorMinor :: Iso' (RegionIndicator, CellPos) (RegionIndicator, Int, Int)

@@ -63,10 +63,10 @@ import Sudoku.Tuples (
  )
 import TextShow (Builder, TextShow (showb), toLazyText, unlinesB)
 
-import Data.HashSet qualified as HS
-import Data.IntMap.Monoidal qualified as M
+import Data.IntMap.Monoidal.Strict qualified as M
 import Data.Text.Lazy.IO qualified as T
 import Data.Vector.Unboxed qualified as VU
+import qualified Data.HashSet as HS
 
 data SimplifierResult s a
     = Contradicted
@@ -180,7 +180,7 @@ collectSummaries f = summarizeWithContradictions (gridLens f . cells) (summarize
 
 fullSimplifyStep :: forall f s a. (SimplifierConstraint f s a) => f -> s a -> SimplifierResult s a
 fullSimplifyStep f g
-    | HS.null detectedContras = Successful g' exps isSolved
+    | null detectedContras = Successful g' exps isSolved
     | otherwise = Contradicted g' detectedContras exps
   where
     (!contras, !solvedSumms, !summs) = collectSummaries f g
