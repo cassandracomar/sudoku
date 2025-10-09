@@ -163,6 +163,8 @@ program-options
                  -fdo-clever-arg-eta-expansion
                  -flocal-float-out
                  -flocal-float-out-top-level
+                 -fspec-constr
+                 -fspec-constr-keen
                  -- giving the specializer more room to chug makes the generated core more closely match the
                  -- source program. or at least, I can read it more easily and recognize what's happening
                  -- where.

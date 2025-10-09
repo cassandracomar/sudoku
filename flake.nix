@@ -123,6 +123,7 @@
             "-DCMAKE_CXX_COMPILER=clang++"
             "-DCMAKE_BUILD_TYPE=Release"
             "-DBUILD_SHARED=On"
+            "-DCMAKE_POLICY_VERSION_MINIMUM=3.10"
           ];
 
           postInstall = ''
@@ -474,6 +475,7 @@
               # inherit (pkgs.llvmPackages.libllvm) lib dev;
               inherit (pkgs.stdenv) cc;
               inherit (pkgs.stdenv.cc) bintools;
+              inherit (pkgs) cmake;
               # inherit autofdo;
               graphviz = inputs.nixpkgs.legacyPackages.${system}.graphviz;
             };

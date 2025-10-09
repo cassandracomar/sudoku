@@ -96,9 +96,9 @@ size (BitSet (W16# !bits)) = Exts.W# (Exts.popCnt16# (Exts.word16ToWord# bits))
 -- | Ask whether the item is in the bit set.
 {-# INLINE member #-}
 member :: (Enum a) => a -> BitSet a -> Bool
-member x bs = let
-  !(Exts.I# i) = fromEnum x
-  in member# i bs
+member x bs =
+    let !(Exts.I# i) = fromEnum x
+    in member# i bs
 
 {-# INLINE member# #-}
 member# :: (Enum a) => Exts.Int# -> BitSet a -> Bool
@@ -200,8 +200,9 @@ ifoldr f z bs = go (size bs) 0
   where
     go :: Word -> Int -> b
     go 0 !_ = z
-    go !n !b = let !(Exts.I# i) = b in
-        if member# i bs
+    go !n !b =
+        let !(Exts.I# i) = b
+        in if member# i bs
             then f b (toEnum b) (go (pred n) (succ b))
             else go n (succ b)
 
@@ -213,8 +214,9 @@ foldrIndex :: (Enum a) => (Int -> b -> b) -> b -> BitSet a -> b
 foldrIndex f z bs = go (size bs) 0
   where
     go 0 !_ = z
-    go !n !b = let !(Exts.I# i) = b in
-        if member# i bs
+    go !n !b =
+        let !(Exts.I# i) = b
+        in if member# i bs
             then b `f` go (pred n) (succ b)
             else go n (succ b)
 
@@ -249,6 +251,9 @@ fromList xs = BitSet $! List.foldl' (\i x -> i `setBit` fromEnum x) 0 xs
 "shiftL/shiftR" forall c r.
     Exts.uncheckedShiftL# (Exts.uncheckedShiftRL# (Exts.word16ToWord# c) r) r =
         Exts.word16ToWord# c
+"shiftL/shiftR/Word16" forall c r.
+    Exts.uncheckedShiftLWord16# (Exts.uncheckedShiftRLWord16# c r) r =
+        c
 "unnecessaryAnd/Word16" forall c. Exts.and# c 65535## = c
 "unnecessaryAnd/Word8" forall c. Exts.and# c 255## = c
     #-}

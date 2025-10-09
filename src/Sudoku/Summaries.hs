@@ -25,7 +25,7 @@ import Data.Utils ((>>>>))
 import Data.Vector.Generic.Lens (vectorIx)
 import Data.Vector.Unboxed (IsoUnbox)
 import Data.Word (Word16, Word8)
-import Data.Word16Set (bsfolded, bsindices)
+import Data.Word16Set (bsfolded)
 import GHC.Base (inline)
 import GHC.Generics (Generic)
 import GHC.TypeLits (Nat, natVal)
@@ -629,7 +629,7 @@ possibilitiesWithLoc ::
 possibilitiesWithLoc = ifolding (\(loc, cell) -> Identity (loc, posses loc cell))
   where
     ins loc ri r a = M.insert a (ortho ri loc) r
-    posses loc cell ri = const $ foldlOf' (_Possibly . _CellSet . bsindices) (ins loc ri) mempty cell
+    posses loc cell ri = const $ foldlOf' (_Possibly . _CellSet . bsfolded . from enumerated) (ins loc ri) mempty cell
 {-# INLINE possibilitiesWithLoc #-}
 
 contradictions ::
@@ -818,13 +818,20 @@ testForContradictions !summs = testAcross Row <> testAcross Column <> testAcross
     testAcross !ri = V.ifoldl' (regionalContradictionsTest ri) mempty (summs ^. ix ri . byRegion)
 {-# INLINE testForContradictions #-}
 
+lowerBound :: forall a. (Enum a, Bounded a) => Int
+lowerBound = fromEnum (minBound @a)
+
+upperBound :: forall a. (Enum a, Bounded a) => Int
+upperBound = fromEnum (maxBound @a)
+
 {- | if the possible locations for a digit within a set are aligned on intersecting sets (i.e. 2 only has two locations within a box and they're in the same column),
 then remove that digit from other possible locations along the rest of the intersecting traversal.
 -}
 digitLocationsAlignedOn ::
     forall a.
-    (Enum a, VU.Unbox a, Ord a, TextShow a) => RegionIndicator -> Word8 -> LocationAlignment a -> Grid a -> Grid a
-digitLocationsAlignedOn ri i (LocationAlignment possibles) g = foldl' update g [toEnum 0 .. toEnum 8]
+    (Enum a, Bounded a, VU.Unbox a, Ord a, TextShow a) =>
+    RegionIndicator -> Word8 -> LocationAlignment a -> Grid a -> Grid a
+digitLocationsAlignedOn ri i (LocationAlignment possibles) g = foldl' update g [0 .. 8]
   where
     l = case ri of
         Row -> rowAt (fromIntegral i)
@@ -855,12 +862,14 @@ digitLocationsAlignedOn ri i (LocationAlignment possibles) g = foldl' update g [
 {-# INLINE digitLocationsAlignedOn #-}
 
 simplifyFromDigitsAligned ::
-    (VU.Unbox a, Enum a, Ord a, TextShow a) =>
+    forall a.
+    (VU.Unbox a, Enum a, Bounded a, Ord a, TextShow a) =>
     Lens' (Grid a) (VU.Vector (Cell a)) -> RegionSummaries (LocationAlignment a) -> Grid a -> Grid a
 simplifyFromDigitsAligned _ summs = flip (foldl' (\g (ri, i) -> digitLocationsAlignedOn ri i (summFor ri i) g)) wholeGridBySet
   where
     summFor ri i = summs ^. ix ri . ix i
-    wholeGridBySet = [(ri, i) | ri <- [Row, Column, Box], i <- [1 .. 9]]
+    wholeGridBySet =
+        [(ri, i) | ri <- [Row, Column, Box], i <- [1 .. 9]]
 
 {-# RULES
 "unionWith/tipR" forall f t1. MS.unionWithKey f t1 MM.Nil = t1

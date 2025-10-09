@@ -16,10 +16,10 @@ import Sudoku.Simplifiers
 import Sudoku.Summaries (ValueConstraint, checkSolved, solved, summaryOf)
 import TextShow as TB (Builder, TextShow (showb, showbList), toLazyText, unlinesB)
 
-import Data.Word16Set qualified as A.BS
 import Data.ByteString qualified as BS
 import Data.Set qualified as S
 import Data.Vector.Unboxed qualified as VU
+import Data.Word16Set qualified as A.BS
 
 type SolverConstraints a = (Show a, Ord a, Enum a, VU.Unbox a, VU.Unbox a)
 
@@ -46,7 +46,7 @@ runSimplifierOnce f g =
 
 solverCheckGridSolved :: (ValueConstraint a) => Grid a -> Bool
 solverCheckGridSolved = checkSolved . summaryOf (grid . cells . withIndex . solved)
-{-# INLINE solverCheckGridSolved #-}
+{-# INLINE [0] solverCheckGridSolved #-}
 
 runSimplifier :: forall m a. (SolverMonad m, ValueConstraint a) => Simplify Grid a -> m (Grid a) -> m (Grid a)
 runSimplifier f = fix $ \rec mg -> do
@@ -117,7 +117,7 @@ trying all of the aforementioned strategies recursively just to eliminate a sing
 runBasicSolver :: (SolverMonad m, ValueConstraint a) => Grid a -> m (Grid a)
 runBasicSolver g = do
     g' <- runCheapSimplifiers (return g)
-    ensure (== g) g' <|> runExpensiveSimplifiers (return g')
+    ensure solverCheckGridSolved g' <|> ensure (== g) g' <|> runExpensiveSimplifiers (return g')
 {-# SPECIALIZE runBasicSolver :: Grid Digit -> Sudoku Digit (Grid Digit) #-}
 
 printNotice :: (SolverMonad m) => [Builder] -> m ()
