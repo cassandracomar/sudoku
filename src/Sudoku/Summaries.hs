@@ -800,7 +800,7 @@ regionalContradictionsTest !ri !res !l (Contradictions !empt !poss !known) = dig
     maybeIns = flip $ maybe <*> flip HS.insert
     !sharedCell = digitsForcedIntoCells res ri l poss known
     !cellContras = foldlOf' sel (flip (HS.insert . NoFillForCell)) sharedCell empt
-    !repeatedDigits = ifoldl' (\i -> flip $ maybeIns . findDigitRepeatsOn ri l i) cellContras known
+    !repeatedDigits = ifoldl' (flip . (findDigitRepeatsOn ri l >>>> maybeIns)) cellContras known
     !digitContradictions = F.foldl' (flip $ maybeIns . findDigitContradiction ri l poss known) repeatedDigits [minBound .. maxBound]
 {-# SPECIALIZE regionalContradictionsTest ::
     RegionIndicator
@@ -824,6 +824,9 @@ lowerBound = fromEnum (minBound @a)
 upperBound :: forall a. (Enum a, Bounded a) => Int
 upperBound = fromEnum (maxBound @a)
 
+digitRange :: forall a c. (Enum a, Bounded a, Integral c) => [c]
+digitRange = [fromIntegral (lowerBound @a) .. fromIntegral (upperBound @a)]
+
 {- | if the possible locations for a digit within a set are aligned on intersecting sets (i.e. 2 only has two locations within a box and they're in the same column),
 then remove that digit from other possible locations along the rest of the intersecting traversal.
 -}
@@ -831,7 +834,7 @@ digitLocationsAlignedOn ::
     forall a.
     (Enum a, Bounded a, VU.Unbox a, Ord a, TextShow a) =>
     RegionIndicator -> Word8 -> LocationAlignment a -> Grid a -> Grid a
-digitLocationsAlignedOn ri i (LocationAlignment possibles) g = foldl' update g [0 .. 8]
+digitLocationsAlignedOn ri i (LocationAlignment possibles) g = foldl' update g (digitRange @a)
   where
     l = case ri of
         Row -> rowAt (fromIntegral i)
@@ -852,9 +855,9 @@ digitLocationsAlignedOn ri i (LocationAlignment possibles) g = foldl' update g [
                         Box -> boxAt i' @\\ l
             )
     disjointInds d
-        | check Row d = locs d ^? _Just . _head . _1 . mkL Row
-        | check Column d = locs d ^? _Just . _head . _2 . mkL Column
-        | check Box d = locs d ^? _Just . _head . _3 . mkL Box
+        | ri /= Row && check Row d = locs d ^? _Just . _head . _1 . mkL Row
+        | ri /= Column && check Column d = locs d ^? _Just . _head . _2 . mkL Column
+        | ri /= Box && check Box d = locs d ^? _Just . _head . _3 . mkL Box
         | otherwise = Nothing
     update g' d = case disjointInds d of
         Just m -> removePossibilitiesOfOn (runIndexedTraversal m) (folded . enumerated) [d] g'
@@ -869,7 +872,7 @@ simplifyFromDigitsAligned _ summs = flip (foldl' (\g (ri, i) -> digitLocationsAl
   where
     summFor ri i = summs ^. ix ri . ix i
     wholeGridBySet =
-        [(ri, i) | ri <- [Row, Column, Box], i <- [1 .. 9]]
+        [(ri, i + 1) | ri <- [Row, Column, Box], i <- digitRange @a]
 
 {-# RULES
 "unionWith/tipR" forall f t1. MS.unionWithKey f t1 MM.Nil = t1

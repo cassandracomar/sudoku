@@ -13,17 +13,17 @@ import Control.Monad.Reader (ReaderT (runReaderT))
 import Control.Monad.Trans (lift)
 import Control.Monad.Trans.Writer.Lazy (WriterT (runWriterT))
 import Control.Monad.TransLogicState.Class (observeT)
-import Data.Word16Set (bsfolded)
 import Data.List (sortBy)
 import Data.Monoid (Sum (Sum))
 import Data.Utils ((>>>>))
 import Data.Word (Word16)
+import Data.Word16Set (bsfolded)
 import Sudoku.Cell
 import Sudoku.Grid
 
-import Data.Word16Set qualified as A.BS
 import Data.Set qualified as S
 import Data.Vector.Unboxed qualified as VU
+import Data.Word16Set qualified as A.BS
 
 type Contradicted a = A.BS.BitSet a
 

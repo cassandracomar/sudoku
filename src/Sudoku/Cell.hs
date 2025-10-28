@@ -294,7 +294,7 @@ majorMinor Column (!r, !c, _) = (Column, cInt, rInt)
 majorMinor Box loc@(_, _, !b) = (Box, bInt, bIdxInt)
   where
     !bInt = fromIntegral b
-    !bIdxInt = fromIntegral (boxIndex loc)
+    !bIdxInt = fromIntegral $! boxIndex loc
 {-# INLINE majorMinor #-}
 
 fromMajorMinor :: (RegionIndicator, Int, Int) -> (RegionIndicator, CellPos)

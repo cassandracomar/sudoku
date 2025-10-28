@@ -63,10 +63,10 @@ import Sudoku.Tuples (
  )
 import TextShow (Builder, TextShow (showb), toLazyText, unlinesB)
 
+import Data.HashSet qualified as HS
 import Data.IntMap.Monoidal.Strict qualified as M
 import Data.Text.Lazy.IO qualified as T
 import Data.Vector.Unboxed qualified as VU
-import qualified Data.HashSet as HS
 
 data SimplifierResult s a
     = Contradicted
@@ -180,15 +180,16 @@ collectSummaries f = summarizeWithContradictions (gridLens f . cells) (summarize
 
 fullSimplifyStep :: forall f s a. (SimplifierConstraint f s a) => f -> s a -> SimplifierResult s a
 fullSimplifyStep f g
-    | null detectedContras = Successful g' exps isSolved
+    | HS.null detectedContras = Successful g' exps isSolved
     | otherwise = Contradicted g' detectedContras exps
   where
     (!contras, !solvedSumms, !summs) = collectSummaries f g
-    !summs' = updateSummaries f g summs
-    !g' = simplify f summs' g
-    exps = explain f g' summs'
-    !detectedContras = testForContradictions contras
     !isSolved = checkSolved solvedSumms
+    !detectedContras = testForContradictions contras
+    !summs' = updateSummaries f g summs
+    -- shortcut calculating the new grid if the current grid is already solved
+    !g' = if isSolved then g else simplify f summs' g
+    exps = explain f g' summs'
 
 instance (ValueConstraint a) => Simplifier SimplifyKnowns Grid a where
     type MonoidFor SimplifyKnowns a = Union (CellSet a)
@@ -261,20 +262,20 @@ instance (ValueConstraint a) => Simplifier SimplifyDigitTuples Grid a where
 printUnquoted :: (MonadIO m) => Text -> m ()
 printUnquoted = liftIO . T.putStrLn
 
-cheapSimplifiers :: (ValueConstraint a) => [[Simplify Grid a]]
-cheapSimplifiers =
+cheapSimplifiers' :: (ValueConstraint a) => [[Simplify Grid a]]
+cheapSimplifiers' =
     [ [mkSimplify SimplifyHiddenSingles]
     , [mkSimplify SimplifyNakedSingles]
     ]
-{-# SPECIALIZE cheapSimplifiers :: [[Simplify Grid Digit]] #-}
+{-# SPECIALIZE cheapSimplifiers' :: [[Simplify Grid Digit]] #-}
 
-expensiveSimplifiers :: (ValueConstraint a) => [[Simplify Grid a]]
+expensiveSimplifiers :: (ValueConstraint a) => [Simplify Grid a]
 expensiveSimplifiers =
-    [ [mkSimplify SimplifyPointing]
-    , [mkSimplify SimplifyCellTuples]
-    , [mkSimplify SimplifyDigitTuples]
+    [ mkSimplify SimplifyPointing
+    , mkSimplify SimplifyCellTuples
+    , mkSimplify SimplifyDigitTuples
     ]
-{-# SPECIALIZE expensiveSimplifiers :: [[Simplify Grid Digit]] #-}
+{-# SPECIALIZE expensiveSimplifiers :: [Simplify Grid Digit] #-}
 
 interleavedSteps :: (ValueConstraint a) => [Simplify Grid a]
 interleavedSteps = [mkSimplify SimplifyKnowns]
@@ -283,6 +284,10 @@ interleavedSteps = [mkSimplify SimplifyKnowns]
 orderSimplifiers :: (ValueConstraint a) => [[Simplify Grid a]] -> [Simplify Grid a]
 orderSimplifiers = (interleavedSteps <>) . intercalate interleavedSteps
 {-# SPECIALIZE orderSimplifiers :: [[Simplify Grid Digit]] -> [Simplify Grid Digit] #-}
+
+cheapSimplifiers :: (ValueConstraint a) => [Simplify Grid a]
+cheapSimplifiers = orderSimplifiers cheapSimplifiers'
+{-# SPECIALIZE cheapSimplifiers :: [Simplify Grid Digit] #-}
 
 -- | run the provided simplifier on the given `Grid`
 runSimplifierPure :: (ValueConstraint a) => Simplify Grid a -> Grid a -> SimplifierResult Grid a

@@ -6,14 +6,14 @@ import Control.Monad (foldM, guard, unless, when)
 import Control.Monad.Fix (fix)
 import Control.Monad.RWS.Lazy (MonadState (put))
 import Data.Aeson (eitherDecodeStrict')
+import Data.Function (on)
 import Data.Functor (($>))
 import Data.Maybe (fromMaybe)
-import Data.Utils ((>>>>))
 import Sudoku.Backtracking (Contradicted, Sudoku, attemptToContradict, findRestrictedCells, runSudokuT)
 import Sudoku.Cell
 import Sudoku.Grid
 import Sudoku.Simplifiers
-import Sudoku.Summaries (ValueConstraint, checkSolved, solved, summaryOf)
+import Sudoku.Summaries (ValueConstraint)
 import TextShow as TB (Builder, TextShow (showb, showbList), toLazyText, unlinesB)
 
 import Data.ByteString qualified as BS
@@ -31,29 +31,47 @@ printContradictions :: (SolverMonad m) => [TB.Builder] -> m ()
 printContradictions contras = printVerbose . toLazyText $ unlinesB ("Found Contradictions: " : contras)
 {-# INLINE printContradictions #-}
 
+{- |
+this action returns a grid if the solver has failed to make progress. the solver cannot make progress if:
+  1. the grid is already solved
+  2. the output of the last simplifier is the same as it's input
+-}
+cannotProgress :: (SolverMonad m, Eq a) => Grid a -> Grid a -> m (Grid a)
+cannotProgress g g' = alreadySolved g <|> noProgress g g'
+{-# INLINE cannotProgress #-}
+
+{- |
+this action yields the input grid if it's already solved and `mzero` if it is not.
+-}
+alreadySolved :: (SolverMonad m) => Grid a -> m (Grid a)
+alreadySolved = ensure (view isSolved)
+{-# INLINE alreadySolved #-}
+
+{- |
+this action yields the input grid if the grid pre- and post- simplifier execution are identical.
+-}
+noProgress :: (SolverMonad m, Eq a) => Grid a -> Grid a -> m (Grid a)
+noProgress = ensure . gEq
+  where
+    gEq = (==) `on` view grid
+{-# INLINE noProgress #-}
+
 runSimplifierOnce :: forall m a. (SolverMonad m, ValueConstraint a) => Simplify Grid a -> Grid a -> m (Grid a)
-runSimplifierOnce f g =
-    ensure (const solveCheck) g <|> ensure (== g) g' <|> do
+runSimplifierOnce !f !g =
+    cannotProgress g g' <|> do
         when (null contras) $ printStep f g res
         unless (null contras) $ printContradictions (contras ^.. folded . to showb)
         guard (null contras) $> g'
   where
-    res = runSimplifierPure f g
-    contras = res ^. contradictionDescs
-    solveCheck = fromMaybe False $ res ^? isSolvedRes
-    g' = res ^. simplifierOutput & isSolved .~ solveCheck
+    !res = runSimplifierPure f g
+    !contras = res ^. contradictionDescs
+    !solveCheck = fromMaybe False $ res ^? isSolvedRes
+    !g' = res ^. simplifierOutput & isSolved .~ solveCheck
 {-# INLINE runSimplifierOnce #-}
 
-solverCheckGridSolved :: (ValueConstraint a) => Grid a -> Bool
-solverCheckGridSolved = checkSolved . summaryOf (grid . cells . withIndex . solved)
-{-# INLINE [0] solverCheckGridSolved #-}
-
-runSimplifier :: forall m a. (SolverMonad m, ValueConstraint a) => Simplify Grid a -> m (Grid a) -> m (Grid a)
-runSimplifier f = fix $ \rec mg -> do
-    g <- mg
-    g' <- runSimplifierOnce f g
-    ensure (== g) g' <|> rec (return g')
-{-# SPECIALIZE runSimplifier :: Simplify Grid Digit -> Sudoku Digit (Grid Digit) -> Sudoku Digit (Grid Digit) #-}
+runCheapSimplifier :: forall m a. (SolverMonad m, ValueConstraint a) => Simplify Grid a -> Grid a -> m (Grid a)
+runCheapSimplifier !f !g = alreadySolved g <|> runSimplifierOnce f g
+{-# INLINE runCheapSimplifier #-}
 
 {- | run each basic strategy in sequence, interleaving strategies that should be run in between every pair of steps.
 i.e. if we've marked some cells as `Known`, we should make sure that we remove impossible values from cells before
@@ -62,20 +80,23 @@ running the next simplifier.
 runCheapSimplifiers :: forall m a. (SolverMonad m, ValueConstraint a) => m (Grid a) -> m (Grid a)
 runCheapSimplifiers = fix $ \rec mg -> do
     g <- mg
-    g' <- foldM (flip runSimplifierOnce) g (orderSimplifiers cheapSimplifiers)
-    ensure (== g) g' <|> rec (return g')
+    g' <- foldM (flip runCheapSimplifier) g cheapSimplifiers
+    cannotProgress g g' <|> rec (return g')
 {-# SPECIALIZE runCheapSimplifiers :: Sudoku Digit (Grid Digit) -> Sudoku Digit (Grid Digit) #-}
 
 runExpensiveSimplifier :: forall m a. (SolverMonad m, ValueConstraint a) => Simplify Grid a -> Grid a -> m (Grid a)
-runExpensiveSimplifier = runSimplifierOnce >>>> runCheapSimplifiers
-{-# SPECIALIZE runExpensiveSimplifier :: Simplify Grid Digit -> Grid Digit -> Sudoku Digit (Grid Digit) #-}
+runExpensiveSimplifier !f !g =
+    alreadySolved g <|> do
+        g' <- runSimplifierOnce f g
+        noProgress g g' <|> runCheapSimplifiers (return g')
+{-# INLINE runExpensiveSimplifier #-}
 
 -- | run each expensive strategy in sequence, interleaving strategies that should be run in between every pair of steps.
 runExpensiveSimplifiers :: forall m a. (SolverMonad m, ValueConstraint a) => m (Grid a) -> m (Grid a)
 runExpensiveSimplifiers = fix $ \rec mg -> do
     g <- mg
-    g' <- foldM (flip runExpensiveSimplifier) g (orderSimplifiers expensiveSimplifiers)
-    ensure (== g) g' <|> rec (return g')
+    g' <- alreadySolved g <|> foldM (flip runExpensiveSimplifier) g expensiveSimplifiers
+    cannotProgress g g' <|> rec (return g')
 {-# SPECIALIZE runExpensiveSimplifiers :: Sudoku Digit (Grid Digit) -> Sudoku Digit (Grid Digit) #-}
 
 parseGrid :: String -> IO (Grid Digit)
@@ -89,9 +110,10 @@ runSolverOnFile :: SolverOptions -> IO ()
 runSolverOnFile opts = do
     g <- parseGrid (opts ^. fp)
     g' <- runSolver opts g
-    guard (solverCheckGridSolved g')
+    guard (view isSolved g')
 
-{- | run the basic strategies for solving sudoku puzzles:
+{- |
+run the basic strategies for solving sudoku puzzles:
     1. if a `Cell` is already `Known`, remove it's value as a possibility from all `Cell`s in it's neighborhood.
     2. if a `Cell` only has one possibility remaining, mark it as `Known`
     3. if a `Digit` can only occur in a single location in a region (`Row`\/`Column`\/`Box`), mark it as `Known` in that location.
@@ -117,7 +139,7 @@ trying all of the aforementioned strategies recursively just to eliminate a sing
 runBasicSolver :: (SolverMonad m, ValueConstraint a) => Grid a -> m (Grid a)
 runBasicSolver g = do
     g' <- runCheapSimplifiers (return g)
-    ensure solverCheckGridSolved g' <|> ensure (== g) g' <|> runExpensiveSimplifiers (return g')
+    cannotProgress g g' <|> runExpensiveSimplifiers (return g')
 {-# SPECIALIZE runBasicSolver :: Grid Digit -> Sudoku Digit (Grid Digit) #-}
 
 printNotice :: (SolverMonad m) => [Builder] -> m ()
@@ -143,19 +165,20 @@ printNoticeEnd loc cs =
         ]
 {-# INLINE printNoticeEnd #-}
 
-reportSolved :: (SolverMonad m, ValueConstraint a) => Grid a -> m ()
-reportSolved g = when (solverCheckGridSolved g) (printQuiet . toLazyText . unlinesB $ report)
+reportIfSolved :: (SolverMonad m, ValueConstraint a) => Grid a -> m ()
+reportIfSolved g = when (view isSolved g) (printQuiet . toLazyText . unlinesB $ report)
   where
     report = [dashRow, "Step: Solved!", "Final Grid:", showb g]
-{-# INLINE reportSolved #-}
+{-# INLINE reportIfSolved #-}
 
-{- | use the basic solver until it fails to make progress, then try to prove what values cells cannot take. this uses
+{- |
+use the basic solver until it fails to make progress, then try to prove what values cells cannot take. this uses
 backtracking to find contradictions. this solver may actually solve the puzzle while looking for contradictions.
 however, because we're searching for contradictions, such lucky guesses aren't used. instead, the solver tracks what
 values cells cannot take, removes those values from those cells, and attempts to resolve using the basic solver.
 candidate cells are ordered by 1) the number of available values for the cell, followed by 2) how restricted the cell's
 neighborhood is, where we sum the number of values each cell in the neighborhood can take, as a proxy for restriction. a
-neighborhood, here, refers to the cells that can see the cell in question -- i.e. it's row\/column\/box.
+neighborhood, here, refers to the cells that can see the cell in question -- i.e. it's `Row`\/`Column`\/`Box`.
 
 this strategy is called a "Forcing Chain". to solve every puzzle with a unique solution, we actually need to apply this
 strategy recursively -- i.e. we should search for contradictions in values by calling the backtracking solver itself.
@@ -184,11 +207,11 @@ TODO: there's more information available from `attemptToContradict` than we're a
 runBacktrackingSolver :: (ValueConstraint a) => Sudoku a (Grid a) -> Sudoku a (Grid a)
 runBacktrackingSolver mg = do
     g <- runBasicSolver =<< mg
-    reportSolved g
-    ensure solverCheckGridSolved g <|> do
+    reportIfSolved g
+    alreadySolved g <|> do
         g' <- go (findRestrictedCells g ^.. folded . _1) g
-        reportSolved g'
-        ensure solverCheckGridSolved g' <|> ensure (== g) g' <|> runBacktrackingSolver (return g')
+        reportIfSolved g'
+        cannotProgress g g' <|> runBacktrackingSolver (return g')
   where
     removePoss loc cs = ix loc . _Possibly . _CellSet %~ (A.BS.\\ cs)
     addContra loc = contradictionSearched %~ S.insert loc
@@ -203,7 +226,7 @@ runBacktrackingSolver mg = do
         printNoticeEnd loc cs
         let g' = applyUpdates loc cs g
         g'' <- put (A.BS.empty, g') >> runBasicSolver g'
-        ensure solverCheckGridSolved g'' <|> go locs g''
+        alreadySolved g'' <|> go locs g''
     go [] g = return g
 {-# SPECIALIZE runBacktrackingSolver :: Sudoku Digit (Grid Digit) -> Sudoku Digit (Grid Digit) #-}
 
@@ -217,6 +240,6 @@ displayStartNotice = printQuiet . toLazyText . unlinesB . report
     report g = [dashRow, "Step: Initial", "Starting Grid:", showb g]
 {-# INLINE displayStartNotice #-}
 
--- | interface to the solver: run the backtracking solver and strip away the intervening monads such that we're left with an IO action.
+-- | interface to the solver: run the backtracking solver and strip away the intervening monads such that we're left with an `IO` action.
 runSolver :: SolverOptions -> Grid Digit -> IO (Grid Digit)
 runSolver opts = (*>) <$> displayStartNotice <*> runBacktrackingSolver' <**> runSudokuT opts

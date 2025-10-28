@@ -103,7 +103,7 @@ library
                     , transformers
                     , mtl
                     , array
-                    , containers == 0.8
+                    , containers
                     , aeson
                     , bytestring
                     , loop

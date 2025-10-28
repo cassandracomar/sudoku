@@ -436,9 +436,7 @@
           };
         };
         haskellProjects.default = {
-          basePackages =
-            config.haskellProjects.ghc912.outputs.finalPackages.extend (final: prev: {
-            });
+          basePackages = config.haskellProjects.ghc912.outputs.finalPackages;
           projectRoot = ./.;
 
           settings = {
@@ -447,13 +445,13 @@
             #   broken = false;
             #   jailbreak = true;
             # };
-            sudoku = {self, ...}: {
-              extraLibraries = [self.containers_0_8];
-              custom = drv:
-                pkgs.haskell.lib.compose.allowInconsistentDependencies (drv.override {
-                  containers = self.containers_0_8;
-                });
-            };
+            # sudoku = {self, ...}: {
+            #   extraLibraries = [self.containers_0_8];
+            #   custom = drv:
+            #     pkgs.haskell.lib.compose.allowInconsistentDependencies (drv.override {
+            #       containers = self.containers_0_8;
+            #     });
+            # };
           };
 
           devShell = {
@@ -494,6 +492,7 @@
         packages.llvm = pkgs.llvmPackages.llvm;
         # packages.libcxxStdenv = libcxxStdenv;
         packages.autofdo = autofdo;
+        packages.vector = config.haskellProjects.ghc912.outputs.finalPackages.vector;
 
         packages.default = self'.packages.sudoku;
         formatter = inputs.nixpkgs.legacyPackages.${system}.alejandra;
