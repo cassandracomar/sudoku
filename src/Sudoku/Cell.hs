@@ -50,6 +50,15 @@ instance Bounded Digit where
     minBound = One
     maxBound = Nine
 
+lowerBound :: forall a. (Enum a, Bounded a) => Int
+lowerBound = fromEnum (minBound @a)
+
+upperBound :: forall a. (Enum a, Bounded a) => Int
+upperBound = fromEnum (maxBound @a)
+
+digitRange :: forall a c. (Enum a, Bounded a, Integral c) => [c]
+digitRange = [fromIntegral (lowerBound @a) .. fromIntegral (upperBound @a)]
+
 -- | rather than convert back and forth through `Int`, just look up the enum values
 digitToWord16 :: Digit -> Word16
 digitToWord16 d = W16# (wordToWord16# (int2Word# (dataToTag# d)))

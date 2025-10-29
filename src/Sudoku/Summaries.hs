@@ -13,7 +13,6 @@ import Control.Applicative ((<**>))
 import Control.DeepSeq (NFData)
 import Control.Lens
 import Control.Lens.Extras (is)
-import Control.Monad (forM_)
 import Control.Monad.ST (ST, runST)
 import Data.Containers.ListUtils (nubOrd)
 import Data.Default (Default (def))
@@ -57,6 +56,7 @@ import Data.IntMap.Strict qualified as MS
 import Data.Vector qualified as V
 import Data.Vector.Generic qualified as VG
 import Data.Vector.Generic.Mutable qualified as MVG
+import Data.Vector.Mutable qualified as MV
 import Data.Vector.Primitive qualified as VP
 import Data.Vector.Unboxed qualified as VU
 import Data.Vector.Unboxed.Base qualified as MVU
@@ -330,29 +330,32 @@ addToSummary (r, c, b) (rs, cs, bs) m = upd Row rs r *> upd Column cs c *> upd B
     upd ri vs i = MVG.modify vs (<> m ri i) (fromIntegral i - 1)
 {-# INLINE addToSummary #-}
 
-summaryOfM ::
-    (Monoid m, MVG.MVector v m) =>
-    IndexedFold CellPos s (AcrossRegion m)
-    -> s
-    -> (forall st. ST st (v (MVG.PrimState (ST st)) m, v (MVG.PrimState (ST st)) m, v (MVG.PrimState (ST st)) m))
-summaryOfM l s = (,,) <$> initialize <*> initialize <*> initialize >>= flip (ifoldlMOf l addToSummary) s
-  where
-    initialize = do
-        v <- MVG.new 9
-        MVG.set v mempty $> v
-{-# INLINE summaryOfM #-}
-
-{- | produce a summary for an entire grid. takes the `Grid` vector and a function that maps each `Cell` to a Monoidal summary type `m`, carrying an index that
-provides the necessary information about the `Cell`'s `Row`\/`Column`\/`Box`. the summary type chosen determines the information available at the end of the fold.
+{- | produce a summary for an entire grid. takes the `Grid` vector and a function that maps each `Cell` to three Monoidal summary types, carrying an index that
+provides the necessary information about the `Cell`'s `Row`\/`Column`\/`Box`. the summary types chosen determines the information available at the end of the fold.
 for example, mapping each `Cell` to a singleton `CellSet` of `Known` digits wrapped in a `Union` newtype will produce the set of already known digits
 in each `Row`\/`Column`\/`Box`.
 -}
-summaryOf :: (Monoid m) => IndexedFold CellPos s (RegionIndicator -> Word8 -> m) -> s -> RegionSummaries m
-summaryOf l s = runST (summaryOfM l s >>= frzAll <&> mk)
+summaryOf ::
+    forall v a m1 m2 m3 c s.
+    (Monoid m1, Monoid m2, Monoid m3, MVG.MVector v m1, MVG.MVector v m2, MVG.MVector v m3, Enum a, Bounded a) =>
+    IndexedFold CellPos s c
+    -> Fold c (AcrossRegion m1)
+    -> Fold c (AcrossRegion m2)
+    -> Fold c (AcrossRegion m3)
+    -> s
+    -> (RegionSummaries m1, RegionSummaries m2, RegionSummaries m3)
+summaryOf l m1 m2 m3 s = runST (initialize3x3 >>= flip (ifoldlMOf l ins) s >>= mkSumms)
   where
-    frzAll (rs, cs, bs) = (,,) <$> VG.unsafeFreeze rs <*> VG.unsafeFreeze cs <*> VG.unsafeFreeze bs
+    initialize = MVG.replicate (upperBound @a + 1) mempty
+    initialize3 = (,,) <$> initialize <*> initialize <*> initialize
+    initialize3x3 = (,,) <$> initialize3 <*> initialize3 <*> initialize3
 
-    mk (r, c, b) = RegionSummaries (CellSummaries r) (CellSummaries c) (CellSummaries b)
+    add loc summs m a = addToSummary loc summs (foldOf m a)
+    ins loc (s1, s2, s3) a = (,,) <$> add loc s1 m1 a <*> add loc s2 m2 a <*> add loc s3 m3 a
+
+    mkCs v' = CellSummaries <$> V.unsafeFreeze v'
+    mkSumm (r, c, b) = RegionSummaries <$> mkCs r <*> mkCs c <*> mkCs b
+    mkSumms (s1, s2, s3) = (,,) <$> mkSumm s1 <*> mkSumm s2 <*> mkSumm s3
 {-# INLINE summaryOf #-}
 
 -- | apply updates derived from `RegionSummaries` to `s` as determined by the function `f` at each position (`CellPos`, `Cell`) in `s`.
@@ -640,22 +643,6 @@ contradictions = (noPossibilities <|.|> possibilitiesWithLoc <|.|> countedKnowns
     mkContra (el, (cp, ck)) = Contradictions el cp ck
 {-# INLINE contradictions #-}
 
-factor ::
-    (V.MVector st (SummaryRecord m a), V.MVector st (SummaryRecord m a), V.MVector st (SummaryRecord m a))
-    -> ST st (Summary m a)
-factor v = do
-    ( (rs, rs', rs'')
-        , (cs, cs', cs'')
-        , (bs, bs', bs'')
-        ) <-
-        munzip33 v
-    (,,) <$> mk rs cs bs <*> mk rs' cs' bs' <*> mk rs'' cs'' bs''
-  where
-    -- unsafeFreeze is safe here because we only read from the vector afterwards.
-    mkCs v' = CellSummaries <$> V.unsafeFreeze v'
-    mk r c b = RegionSummaries <$> mkCs r <*> mkCs c <*> mkCs b
-{-# INLINE factor #-}
-
 type Solved a = Union (CellSet a)
 
 type Summary m a = (RegionSummaries (Contradictions a), RegionSummaries (Solved a), RegionSummaries m)
@@ -663,35 +650,16 @@ type Summary m a = (RegionSummaries (Contradictions a), RegionSummaries (Solved 
 type ValueConstraint a =
     (VU.Unbox a, VU.IsoUnbox a Word16, VU.Unbox a, Enum a, Bounded a, Ord a, TextShow a, Hashable a, NFData a)
 
--- | unzip 3 mutable vectors of the same length via a single loop.
-munzip33 ::
-    (MVG.MVector v (a, b, c), MVG.MVector v a, MVG.MVector v b, MVG.MVector v c) =>
-    (v st (a, b, c), v st (a, b, c), v st (a, b, c))
-    -> ST st ((v st a, v st b, v st c), (v st a, v st b, v st c), (v st a, v st b, v st c))
-munzip33 (v1, v2, v3) = do
-    let len = MVG.basicLength v1
-    (v1', v2', v3') <- (,,) <$> mk len <*> mk len <*> mk len
-    forM_ [0 .. (len - 1)] $ \i -> do
-        (a, b, c) <- (,,) <$> MVG.read v1 i <*> MVG.read v2 i <*> MVG.read v3 i
-        upd v1' i a *> upd v2' i b *> upd v3' i c
-    return (v1', v2', v3')
-  where
-    mk len = (,,) <$> MVG.new len <*> MVG.new len <*> MVG.new len
-    upd (as, bs, cs) i (a, b, c) =
-        MVG.write as i a *> MVG.write bs i b *> MVG.write cs i c
-{-# INLINE munzip33 #-}
-
 {- | provides three summaries:
   1. a summary to check whether the grid is contradicted
   2. a summary to check whether the grid is solved
   3. the requested summary for the simplifier
 -}
 summarizeWithContradictions ::
-    (IsoUnbox a Word16, Ord a, Enum a, Monoid m) =>
+    forall a m s.
+    (IsoUnbox a Word16, Ord a, Enum a, Bounded a, Monoid m) =>
     IndexedTraversal' CellPos s (Cell a) -> Fold (CellPos, Cell a) (AcrossRegion m) -> s -> Summary m a
-summarizeWithContradictions l m s = runST $ summaryOfM (l . withIndex . (contradictions <|.|> solved <|.|> m) . to (>>>> normalize)) s >>= factor
-  where
-    normalize (c, (s', m')) = (c, s', m')
+summarizeWithContradictions l = summaryOf @MV.MVector @a (l . withIndex) contradictions solved
 {-# INLINE summarizeWithContradictions #-}
 
 solved :: (Enum a, VU.IsoUnbox a Word16) => IndexedFold CellPos (CellPos, Cell a) (AcrossRegion (Solved a))
@@ -733,7 +701,7 @@ findDigitRepeatsOn !ri !l ~d !known
 
 digitsForcedIntoCells ::
     forall a.
-    (Ord a, Hashable a, Enum a) =>
+    (Ord a, Hashable a, Enum a, NFData a) =>
     HS.HashSet (ContradictionDesc Int a)
     -> RegionIndicator
     -> Int
@@ -788,7 +756,7 @@ findDigitContradiction !ri !l !poss !known ~d
 
 regionalContradictionsTest ::
     forall a.
-    (Ord a, Enum a, Bounded a, Hashable a) =>
+    (Ord a, Enum a, Bounded a, Hashable a, NFData a) =>
     RegionIndicator
     -> HS.HashSet (ContradictionDesc Int a)
     -> Int
@@ -817,15 +785,6 @@ testForContradictions !summs = testAcross Row <> testAcross Column <> testAcross
   where
     testAcross !ri = V.ifoldl' (regionalContradictionsTest ri) mempty (summs ^. ix ri . byRegion)
 {-# INLINE testForContradictions #-}
-
-lowerBound :: forall a. (Enum a, Bounded a) => Int
-lowerBound = fromEnum (minBound @a)
-
-upperBound :: forall a. (Enum a, Bounded a) => Int
-upperBound = fromEnum (maxBound @a)
-
-digitRange :: forall a c. (Enum a, Bounded a, Integral c) => [c]
-digitRange = [fromIntegral (lowerBound @a) .. fromIntegral (upperBound @a)]
 
 {- | if the possible locations for a digit within a set are aligned on intersecting sets (i.e. 2 only has two locations within a box and they're in the same column),
 then remove that digit from other possible locations along the rest of the intersecting traversal.
